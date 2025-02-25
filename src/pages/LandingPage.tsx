@@ -77,7 +77,8 @@ const LandingPage = () => {
                   onClick={() => navigate('/signup')}
                   className="bg-green-600 hover:bg-green-700 text-white px-8 py-6 text-lg"
                 >
-                  Get Started
+                  {/* Get Started */}
+                  GO TO THE DASHBOARD
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
                 <Button

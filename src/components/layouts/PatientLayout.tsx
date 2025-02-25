@@ -43,31 +43,17 @@ interface NavGroup {
   expanded?: boolean;
 }
 
-const navigation: NavGroup[] = [
-  {
-    name: 'Overview',
-    icon: Home,
-    items: [
-      { name: 'Dashboard', href: '/patient-dashboard', icon: Home },
-    ],
-    expanded: true
-  },
-  {
-    name: 'Prescriptions & Orders',
-    icon: FileText,
-    items: [
-      { name: 'Active Prescriptions', href: '/patient-dashboard/prescriptions', icon: Pill, badge: 2 },
-      { name: 'Order History', href: '/patient-dashboard/orders', icon: FileText },
-    ]
-  },
-  {
-    name: 'Medical Records',
-    icon: History,
-    items: [
-      { name: 'Test Results', href: '/patient-dashboard/diagnostics', icon: AlertCircle },
-      { name: 'Medical History', href: '/patient-dashboard/history', icon: History },
-    ]
-  },
+type NavigationItem = NavItem | NavGroup;
+
+const isNavGroup = (item: NavigationItem): item is NavGroup => {
+  return 'items' in item;
+};
+
+const navigation: NavigationItem[] = [
+  { name: 'Dashboard', href: '/patient-dashboard', icon: Home },
+  { name: 'Prescriptions & Orders', href: '/patient-dashboard/prescriptions', icon: Pill, badge: 2 },
+  { name: 'History', href: '/patient-dashboard/history', icon: History },
+  { name: 'AI Assistant', href: '/patient-dashboard/assistant', icon: Bot },
   {
     name: 'Telemedicine',
     icon: Video,
@@ -77,21 +63,12 @@ const navigation: NavGroup[] = [
       { name: 'Chat with Doctor', href: '/patient-dashboard/chat', icon: MessageSquare },
     ]
   },
-  {
-    name: 'AI Assistant',
-    icon: Bot,
-    items: [
-      { name: 'Health Assistant', href: '/patient-dashboard/assistant', icon: Bot },
-      { name: 'Symptom Checker', href: '/patient-dashboard/symptoms', icon: AlertCircle },
-      { name: 'Medicine Info', href: '/patient-dashboard/medicine-info', icon: Pill },
-      { name: 'Voice Commands', href: '/patient-dashboard/voice', icon: MessageCircle },
-    ]
-  },
+  { name: 'Settings', href: '/patient-dashboard/settings', icon: Settings },
 ];
 
 const PatientLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState<string[]>(['Overview']);
+  const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
   const location = useLocation();
 
   const toggleGroup = (groupName: string) => {
@@ -107,93 +84,95 @@ const PatientLayout: React.FC = () => {
   };
 
   return (
-    <Layout>
+    <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
-      <LayoutSidebar
-        collapsed={collapsed}
-        className="border-r bg-white"
-      >
-        <div className="flex h-full flex-col">
-          {/* Sidebar Header */}
-          <div className="flex h-14 items-center border-b px-4">
+      <aside className={`
+        fixed left-0 top-0 z-40 h-screen w-64 
+        transition-transform border-r bg-white
+        ${collapsed ? '-translate-x-full' : 'translate-x-0'}
+      `}>
+        {/* Logo */}
+        <div className="flex h-16 items-center border-b px-6">
+          <span className="text-xl font-semibold">MediFlow</span>
+        </div>
+
+        {/* Navigation */}
+        <nav className="space-y-1 p-4">
+          {navigation.map((item) => (
+            <div key={item.name}>
+              {!isNavGroup(item) ? (
+                <Link
+                  to={item.href}
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                >
+                  <item.icon className="h-5 w-5" />
+                  <span>{item.name}</span>
+                  {item.badge && (
+                    <span className="ml-auto rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-600">
+                      {item.badge}
+                    </span>
+                  )}
+                </Link>
+              ) : (
+                <>
+                  <button
+                    onClick={() => toggleGroup(item.name)}
+                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                  >
+                    <div className="flex items-center gap-3">
+                      <item.icon className="h-5 w-5" />
+                      <span>{item.name}</span>
+                    </div>
+                    {expandedGroups.includes(item.name) ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </button>
+                  {expandedGroups.includes(item.name) && (
+                    <div className="ml-6 space-y-1">
+                      {item.items.map((subItem) => (
+                        <Link
+                          key={subItem.href}
+                          to={subItem.href}
+                          className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                        >
+                          <subItem.icon className="h-5 w-5" />
+                          <span>{subItem.name}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+        </nav>
+      </aside>
+
+      {/* Main Content */}
+      <main className={`
+        flex-1 transition-margin
+        ${collapsed ? 'ml-0' : 'ml-64'}
+      `}>
+        {/* Top Header */}
+        <header className="sticky top-0 z-30 h-16 border-b bg-white">
+          <div className="flex h-full items-center justify-between px-6">
             <button
               onClick={() => setCollapsed(!collapsed)}
-              className="ml-auto rounded-lg p-2 hover:bg-gray-100"
+              className="rounded-lg p-2 hover:bg-gray-100"
             >
               <Menu className="h-5 w-5" />
             </button>
           </div>
+        </header>
 
-          {/* Navigation */}
-          <nav className="flex-1 space-y-1 p-2">
-            {navigation.map((group) => (
-              <div key={group.name} className="space-y-1">
-                <button
-                  onClick={() => toggleGroup(group.name)}
-                  className={`
-                    flex w-full items-center justify-between rounded-lg px-3 py-2
-                    text-gray-500 transition-colors hover:text-gray-900
-                    ${expandedGroups.includes(group.name) ? 'bg-gray-100 text-gray-900' : ''}
-                  `}
-                >
-                  <div className="flex items-center gap-3">
-                    <group.icon className="h-5 w-5" />
-                    <span className="text-sm font-medium">{group.name}</span>
-                  </div>
-                  {expandedGroups.includes(group.name) ? (
-                    <ChevronDown className="h-4 w-4" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" />
-                  )}
-                </button>
-
-                {expandedGroups.includes(group.name) && (
-                  <div className="ml-4 space-y-1">
-                    {group.items.map((item) => (
-                      <Link
-                        key={item.href}
-                        to={item.href}
-                        className={`
-                          flex items-center justify-between rounded-lg px-3 py-2
-                          text-sm text-gray-500 transition-colors hover:text-gray-900
-                          ${isActiveRoute(item.href) ? 'bg-gray-100 text-gray-900 font-medium' : ''}
-                        `}
-                      >
-                        <div className="flex items-center gap-3">
-                          <item.icon className="h-4 w-4" />
-                          <span>{item.name}</span>
-                        </div>
-                        {item.badge && (
-                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-600">
-                            {item.badge}
-                          </span>
-                        )}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </nav>
-
-          {/* User Menu */}
-          <div className="border-t p-4">
-            <Link
-              to="/patient-dashboard/settings"
-              className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-500 transition-colors hover:text-gray-900"
-            >
-              <Settings className="h-5 w-5" />
-              <span className="text-sm font-medium">Settings</span>
-            </Link>
-          </div>
+        {/* Page Content */}
+        <div className="p-6">
+          <Outlet />
         </div>
-      </LayoutSidebar>
-
-      {/* Main Content */}
-      <LayoutContent className="flex-1 overflow-auto">
-        <Outlet />
-      </LayoutContent>
-    </Layout>
+      </main>
+    </div>
   );
 };
 
