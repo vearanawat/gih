@@ -25,7 +25,7 @@ const PatientDashboard: React.FC = () => {
         }
       }
     };
-    fetchUserData();
+    // fetchUserData();
   }, []);
 
   const stats = [
