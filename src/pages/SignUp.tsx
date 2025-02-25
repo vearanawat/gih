@@ -518,16 +518,16 @@ const SignUpPage: React.FC = () => {
         switch (userRole) {
           case "doctor":
             navigate("/doctor-dashboard", { replace: true });
-          break;
+            break;
           case "pharmacist":
             navigate("/pharmacist-dashboard", { replace: true });
-          break;
-        default:
+            break;
+          default:
             navigate("/patient-dashboard", { replace: true });
             break;
-      }
+        }
       }, 1000); // Small delay to ensure role is set
-  };
+    };
 
     fetchUserData();
     setIsLoading(false);
@@ -591,7 +591,7 @@ const SignUpPage: React.FC = () => {
             </div>
           </SignedIn>
         )}
-        </div>
+      </div>
     </div>
   );
 };
