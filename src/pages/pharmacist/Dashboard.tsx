@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -94,34 +94,41 @@ const PharmacistDashboard: React.FC = () => {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editedText, setEditedText] = useState('');
   const [summary, setSummary] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileUpload = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+  const handleFileUpload = async (file: File) => {
+    if (!file) return;
 
-    const uploadFile = files[0];
-    setFile(uploadFile);
+    setFile(file);
+    setPreview(URL.createObjectURL(file));
     setIsProcessing(true);
 
     try {
       const formData = new FormData();
-      formData.append('file', uploadFile);
+      formData.append('file', file);
 
-      const response = await fetch('http://localhost:8000/process_prescription', {
+      const response = await fetch('http://localhost:8000/process-prescription', {
         method: 'POST',
         body: formData,
       });
 
-      const data: ProcessedResult = await response.json();
+      if (!response.ok) {
+        throw new Error('Failed to process prescription');
+      }
+
+      const data = await response.json();
       
+      // Ensure all required fields are present in the results
       const processedResults = data.results.map(result => ({
         text: result.text,
         confidence: result.confidence,
-        box: Array.isArray(result.box) ? result.box : [[0, 0], [0, 0], [0, 0], [0, 0]]
+        box: result.box || [[0, 0], [0, 0], [0, 0], [0, 0]]
       })) as OCRResult[];
       
       setResults(processedResults);
       setSummary(data.summary || 'No summary available');
 
+      // Add new prescription to the list
       const newPrescription: Prescription = {
         id: String(Date.now()),
         patientName: data.structured_data.patient_name || 'Unknown Patient',
@@ -129,15 +136,18 @@ const PharmacistDashboard: React.FC = () => {
         date: data.structured_data.date || new Date().toISOString().split('T')[0],
         medicines: data.structured_data.medicines || [defaultMedicine],
         status: 'pending',
-        confidence: 0.85,
+        confidence: data.structured_data.confidence || 0.85,
         originalText: processedResults.map(r => r.text).join('\n'),
-        imageUrl: URL.createObjectURL(uploadFile)
+        imageUrl: preview || ''
       };
 
       setPrescriptions(prev => [newPrescription, ...prev]);
       setIsProcessing(false);
+      
+      toast.success('Prescription processed successfully');
     } catch (error) {
       console.error('Error processing prescription:', error);
+      toast.error('Failed to process prescription');
       setIsProcessing(false);
     }
   };
@@ -181,8 +191,7 @@ const PharmacistDashboard: React.FC = () => {
         toast.error('Please select an image file');
         return;
       }
-      setFile(file);
-      setPreview(URL.createObjectURL(file));
+      handleFileUpload(file);
     }
   };
 
@@ -207,7 +216,7 @@ const PharmacistDashboard: React.FC = () => {
   };
 
   return (
-    <div className="fade-in space-y-6">
+    <div className="fade-in p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Prescription Processing</h1>
@@ -240,6 +249,31 @@ const PharmacistDashboard: React.FC = () => {
                 />
               </div>
             </div>
+
+            {/* Display Summary First */}
+            {summary && (
+              <div className="mb-6 bg-green-50 rounded-lg p-4 border border-green-100">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Prescription Summary</h3>
+                <p className="text-gray-700">{summary}</p>
+              </div>
+            )}
+
+            {/* Display Extracted Text */}
+            {results.length > 0 && (
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Extracted Text</h3>
+                <div className="space-y-2">
+                  {results.map((result, index) => (
+                    <div key={index} className="p-3 bg-gray-50 rounded-lg">
+                      <p className="text-gray-700">{result.text}</p>
+                      <p className="text-sm text-gray-500 mt-1">
+                        Confidence: {(result.confidence * 100).toFixed(1)}%
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-4">
               {filteredPrescriptions.map((prescription) => (
@@ -349,42 +383,33 @@ const PharmacistDashboard: React.FC = () => {
                   <p className="text-gray-500 text-sm mb-4">
                     or click to select a file
                   </p>
-                  <Input
+                  <input
                     type="file"
-                    accept="image/*"
+                    ref={fileInputRef}
                     className="hidden"
+                    accept="image/*"
                     onChange={handleFileSelect}
-                    id="file-upload"
                   />
                   <Button
-                    onClick={() => document.getElementById('file-upload')?.click()}
-                    variant="outline"
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isProcessing}
                   >
-                    Select File
+                    {isProcessing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4 mr-2" />
+                        Upload Prescription
+                      </>
+                    )}
                   </Button>
                 </div>
               )}
             </div>
-
-            {file && (
-              <Button
-                className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white"
-                onClick={() => handleFileUpload(new DataTransfer().files)}
-                disabled={isProcessing}
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-4 h-4 mr-2" />
-                    Process Prescription
-                  </>
-                )}
-              </Button>
-            )}
           </div>
         </Card>
       </div>
@@ -408,12 +433,6 @@ const PharmacistDashboard: React.FC = () => {
           <div className="space-y-4">
             {results && results.length > 0 ? (
               <div className="space-y-4">
-                {/* Summary Section */}
-                <div className="p-4 bg-white rounded-lg shadow">
-                  <h3 className="text-lg font-semibold mb-2">Summary</h3>
-                  <p className="text-gray-700">{summary}</p>
-                </div>
-                
                 {/* Extracted Text Section */}
                 <div className="p-4 bg-white rounded-lg shadow">
                   <h3 className="text-lg font-semibold mb-2">Extracted Text</h3>
