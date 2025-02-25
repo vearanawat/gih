@@ -34,6 +34,7 @@ import PharmacistOrders from '@/pages/pharmacist/Orders';
 import PharmacistInteractions from '@/pages/pharmacist/Interactions';
 import PharmacistHistory from '@/pages/pharmacist/History';
 import PharmacistNotes from '@/pages/pharmacist/Notes';
+import { SignedIn, SignedOut, SignIn, SignInButton, UserButton } from "@clerk/clerk-react";
 
 // Components
 import ProtectedRoute from '@/components/ProtectedRoute';
@@ -45,16 +46,16 @@ const App: React.FC = () => {
         <Routes>
           {/* Public routes */}
           <Route path="/" element={<LandingPage />} />
-          <Route path="/signin" element={<SignInPage />} />
+          <Route path="/signin" element={<SignIn />} />
           <Route path="/signup" element={<SignUpPage />} />
           
           {/* Patient routes */}
           <Route
             path="/patient-dashboard/*"
             element={
-              <ProtectedRoute allowedRoles={['patient']}>
+              // <ProtectedRoute allowedRoles={['patient']}>
                 <PatientLayout />
-              </ProtectedRoute>
+              // </ProtectedRoute>
             }
           >
             <Route index element={<PatientDashboard />} />
@@ -69,9 +70,9 @@ const App: React.FC = () => {
           <Route
             path="/doctor-dashboard/*"
             element={
-              <ProtectedRoute allowedRoles={['doctor']}>
+              // <ProtectedRoute allowedRoles={['doctor']}>
                 <DoctorLayout />
-              </ProtectedRoute>
+              // </ProtectedRoute>
             }
           >
             <Route index element={<ImageAnalysis />} />
@@ -85,9 +86,9 @@ const App: React.FC = () => {
           <Route
             path="/pharmacist-dashboard/*"
             element={
-              <ProtectedRoute allowedRoles={['pharmacist']}>
+              // <ProtectedRoute allowedRoles={['pharmacist']}>
                 <PharmacistLayout />
-              </ProtectedRoute>
+              // </ProtectedRoute>
             }
           >
             <Route index element={<PharmacistDashboard />} />
