@@ -10,6 +10,10 @@ from datetime import datetime
 import os
 from groq import Groq
 from dotenv import load_dotenv
+from fastapi.responses import JSONResponse
+import easyocr
+import logging
+from typing import List, Dict, Any
 
 # Load environment variables from .env file
 load_dotenv()
@@ -38,6 +42,10 @@ groq_client = Groq(api_key=groq_api_key)
 
 # Initialize OCR
 ocr = None
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def get_ocr():
     global ocr
@@ -245,98 +253,72 @@ async def process_prescription(file: UploadFile = File(...)):
 
 ##################### Multilingual OCR #####################
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-import easyocr
-import cv2
-import numpy as np
-from PIL import Image
-import io
-import re
-import os
-import time
-from typing import List, Tuple
-
-# Add this to your imports section along with your existing imports
-
-# Initialize EasyOCR readers for different language pairs
-easyocr_readers = {}
-
-def get_easyocr_reader(lang_pair):
-    """Get or initialize an EasyOCR reader for a specific language pair."""
-    key = "-".join(lang_pair)
-    if key not in easyocr_readers:
-        try:
-            easyocr_readers[key] = easyocr.Reader(
-                lang_pair,
-                gpu=True if cv2.cuda.getCudaEnabledDeviceCount() > 0 else False,
-                download_enabled=True
-            )
-        except Exception as e:
-            print(f"Error initializing EasyOCR for {lang_pair}: {str(e)}")
-            return None
-    return easyocr_readers[key]
+# Initialize EasyOCR reader
+def get_easyocr_reader(lang_pair=['en']):
+    try:
+        return easyocr.Reader(lang_pair)
+    except Exception as e:
+        logger.error(f"Error initializing EasyOCR: {e}")
+        return None
 
 def calculate_iou(box1, box2):
-    """Calculate Intersection over Union (IoU) between two boxes."""
-    # Extract coordinates
-    x1_1, y1_1, x2_1, y2_1 = box1
-    x1_2, y1_2, x2_2, y2_2 = box2
+    # Convert boxes to format [x1, y1, x2, y2]
+    def get_box_coords(box):
+        return [
+            min(p[0] for p in box),
+            min(p[1] for p in box),
+            max(p[0] for p in box),
+            max(p[1] for p in box)
+        ]
     
-    # Calculate intersection area
-    x_left = max(x1_1, x1_2)
-    y_top = max(y1_1, y1_2)
-    x_right = min(x2_1, x2_2)
-    y_bottom = min(y2_1, y2_2)
+    box1_coords = get_box_coords(box1)
+    box2_coords = get_box_coords(box2)
     
-    if x_right < x_left or y_bottom < y_top:
-        return 0.0
+    # Calculate intersection
+    x1 = max(box1_coords[0], box2_coords[0])
+    y1 = max(box1_coords[1], box2_coords[1])
+    x2 = min(box1_coords[2], box2_coords[2])
+    y2 = min(box1_coords[3], box2_coords[3])
     
-    intersection_area = (x_right - x_left) * (y_bottom - y_top)
+    intersection = max(0, x2 - x1) * max(0, y2 - y1)
     
-    # Calculate union area
-    box1_area = (x2_1 - x1_1) * (y2_1 - y1_1)
-    box2_area = (x2_2 - x1_2) * (y2_2 - y1_2)
-    union_area = box1_area + box2_area - intersection_area
+    # Calculate areas
+    box1_area = (box1_coords[2] - box1_coords[0]) * (box1_coords[3] - box1_coords[1])
+    box2_area = (box2_coords[2] - box2_coords[0]) * (box2_coords[3] - box2_coords[1])
     
-    return intersection_area / union_area if union_area > 0 else 0.0
+    # Calculate IoU
+    union = box1_area + box2_area - intersection
+    return intersection / union if union > 0 else 0
 
 def remove_duplicates(results, iou_threshold=0.5):
-    """
-    Remove duplicate detections based on IoU (Intersection over Union)
-    of bounding boxes and confidence scores.
-    """
-    if not results:
-        return []
+    filtered_results = []
+    used = set()
     
-    # Sort by confidence (highest first)
-    sorted_results = sorted(results, key=lambda x: x[2], reverse=True)
-    
-    final_results = []
-    used_boxes = []
-    
-    for result in sorted_results:
-        bbox, text, prob = result
+    for i, res1 in enumerate(results):
+        if i in used:
+            continue
+            
+        current_group = [res1]
+        used.add(i)
         
-        # Convert to [x1, y1, x2, y2] format
-        box = [
-            min(p[0] for p in bbox), min(p[1] for p in bbox),  # top left
-            max(p[0] for p in bbox), max(p[1] for p in bbox)   # bottom right
-        ]
+        for j, res2 in enumerate(results[i+1:], i+1):
+            if j in used:
+                continue
+                
+            # Calculate IoU between boxes
+            box1 = np.array(res1[0])
+            box2 = np.array(res2[0])
+            iou = calculate_iou(box1, box2)
+            
+            if iou > iou_threshold:
+                current_group.append(res2)
+                used.add(j)
         
-        # Check if this box overlaps significantly with any used box
-        is_duplicate = False
-        for used_box in used_boxes:
-            if calculate_iou(box, used_box) > iou_threshold:
-                is_duplicate = True
-                break
-        
-        # If not a duplicate, add to final results
-        if not is_duplicate:
-            final_results.append(result)
-            used_boxes.append(box)
+        # From the current group, select the one with highest confidence
+        best_result = max(current_group, key=lambda x: x[2] if len(x) > 2 else 0)
+        filtered_results.append(best_result)
     
-    return final_results
+    return filtered_results
 
 def extract_text_and_confidence_easyocr(results):
     """Extract text and confidence scores from EasyOCR result."""
@@ -360,7 +342,25 @@ def extract_text_and_confidence_easyocr(results):
             chat_completion = groq_client.chat.completions.create(
                 messages=[{
                     "role": "user",
-                    "content": f"Summarize this multilingual text concisely: {combined_text}"
+                    "content": f"""
+You are a highly specialized AI trained in medical terminology, prescriptions, and pharmaceutical guidelines. 
+Your task is to summarize the given medical prescription text while prioritizing **medicine names, dosages, 
+frequencies, duration, medical conditions, and important instructions.**  
+
+### **Instructions:**  
+- **Extract and emphasize medicine names** mentioned in the text.  
+- **Highlight dosages, intake frequency, and duration** (e.g., "500mg, twice a day for 5 days").  
+- **Identify any diseases or medical conditions** mentioned in the prescription.  
+- **Retain important doctor instructions** (e.g., "Take before meals", "Avoid alcohol", "Complete full course").  
+- **Ignore irrelevant details** like hospital branding, unnecessary general text, or non-medical content.  
+
+### **Prescription Text:**  
+{combined_text}  
+
+### **Expected Output:**  
+A concise summary focusing only on **medical aspects**, ensuring that key prescription details (medicines, 
+dosages, diseases, and instructions) are retained accurately.
+"""
                 }],
                 model="llama-3.3-70b-versatile",
             )
@@ -376,31 +376,28 @@ def extract_text_and_confidence_easyocr(results):
     }
 
 def create_annotated_image(image, results):
-    """Create annotated image from EasyOCR results."""
-    # Convert PIL Image to OpenCV format
-    img_cv = np.array(image)
-    img_cv = cv2.cvtColor(img_cv, cv2.COLOR_RGB2BGR)
+    # Convert PIL Image to numpy array if needed
+    if isinstance(image, Image.Image):
+        image = np.array(image)
     
-    # Draw bounding boxes and text
-    for (bbox, text, prob) in results:
-        # Convert points to integers
-        points = np.array(bbox).astype(np.int32)
+    annotated = image.copy()
+    
+    for result in results:
+        box = result[0]
+        text = result[1]
         
-        # Draw polygon
-        cv2.polylines(img_cv, [points], isClosed=True, color=(0, 255, 0), thickness=2)
+        # Convert box points to numpy array
+        box = np.array(box, dtype=np.int32)
         
-        # Add text near the bounding box
-        top_left = tuple(map(int, bbox[0]))
-        cv2.putText(img_cv, 
-                   text, 
-                   (top_left[0], top_left[1] - 10), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+        # Draw the bounding box
+        cv2.polylines(annotated, [box], True, (0, 255, 0), 2)
+        
+        # Add text above the box
+        x = min(p[0] for p in box)
+        y = min(p[1] for p in box) - 10
+        cv2.putText(annotated, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
     
-    # Convert back to PIL Image
-    img_cv = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB)
-    annotated_image = Image.fromarray(img_cv)
-    
-    return annotated_image
+    return Image.fromarray(annotated)
 
 # Add this new route to your FastAPI app
 @app.post("/process-multilingual")
@@ -495,6 +492,112 @@ async def process_multilingual(file: UploadFile = File(...)):
     except Exception as e:
         print(f"Error processing multilingual image: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing multilingual image: {str(e)}")
+
+def add_ocr_routes(app: FastAPI):
+    reader = get_easyocr_reader()
+    
+    @app.post("/ocr/process-prescription")
+    async def process_prescription(file: UploadFile = File(...)):
+        """Process a prescription image using OCR."""
+        try:
+            # Read and validate the image
+            contents = await file.read()
+            image = Image.open(io.BytesIO(contents))
+            
+            # Convert image to RGB if necessary
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            
+            # Perform OCR
+            results = reader.readtext(np.array(image))
+            
+            # Remove duplicate detections
+            filtered_results = remove_duplicates(results)
+            
+            # Extract text and confidence
+            text, confidence = extract_text_and_confidence(filtered_results)
+            
+            # Create annotated image
+            annotated_image = create_annotated_image(image, filtered_results)
+            
+            # Convert annotated image to bytes
+            annotated_bytes = io.BytesIO()
+            annotated_image.save(annotated_bytes, format='PNG')
+            
+            return {
+                "text": text,
+                "confidence": confidence,
+                "word_count": len(text.split()),
+                "details": [
+                    {
+                        "text": r[1],
+                        "confidence": r[2] if len(r) > 2 else 0,
+                        "box": r[0]
+                    } for r in filtered_results
+                ]
+            }
+            
+        except Exception as e:
+            logger.error(f"Error processing prescription: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    @app.post("/ocr/process-multilingual")
+    async def process_multilingual(
+        file: UploadFile = File(...),
+        languages: List[str] = ['en']  # Default to English
+    ):
+        """Process an image with multilingual OCR support."""
+        try:
+            # Initialize reader with specified languages
+            multi_reader = get_easyocr_reader(languages)
+            if not multi_reader:
+                raise HTTPException(status_code=500, detail="Failed to initialize OCR reader")
+            
+            # Read and validate the image
+            contents = await file.read()
+            image = Image.open(io.BytesIO(contents))
+            
+            # Convert image to RGB if necessary
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            
+            # Perform OCR
+            results = multi_reader.readtext(np.array(image))
+            
+            # Remove duplicate detections
+            filtered_results = remove_duplicates(results)
+            
+            # Extract text and confidence
+            text, confidence = extract_text_and_confidence(filtered_results)
+            
+            return {
+                "text": text,
+                "confidence": confidence,
+                "languages": languages,
+                "word_count": len(text.split()),
+                "details": [
+                    {
+                        "text": r[1],
+                        "confidence": r[2] if len(r) > 2 else 0,
+                        "box": r[0]
+                    } for r in filtered_results
+                ]
+            }
+            
+        except Exception as e:
+            logger.error(f"Error processing multilingual text: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    @app.get("/ocr/health")
+    async def health_check():
+        """Check if OCR service is healthy."""
+        return {
+            "status": "ok",
+            "message": "OCR service is running",
+            "reader_initialized": reader is not None
+        }
+    
+    logger.info("OCR routes added to FastAPI app")
 
 if __name__ == "__main__":
     import uvicorn

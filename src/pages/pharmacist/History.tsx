@@ -186,7 +186,7 @@ const PharmacistHistory = () => {
                         <p>Prescribed by: {record.details.prescribedBy}</p>
                       )}
                       {record.type === 'order' && record.details.total && (
-                        <p>Total: ${record.details.total.toFixed(2)}</p>
+                        <p>Total: ₹{record.details.total.toFixed(2)}</p>
                       )}
                       {record.details.notes && (
                         <p>Notes: {record.details.notes}</p>

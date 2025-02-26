@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, Calendar, User, Package2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { toast } from "sonner";
+import { useLocation } from 'react-router-dom';
 
 interface Medicine {
   name: string;
@@ -29,6 +30,7 @@ interface MedicineRecord {
   dosage_forms: string[];
   strengths: string[];
   manufacturer: string;
+  price: number;  // Price per unit
 }
 
 // Mock medicine database
@@ -37,15 +39,25 @@ const medicineDatabase: MedicineRecord[] = [
     name: "Amoxicillin",
     dosage_forms: ["Capsule", "Tablet", "Suspension"],
     strengths: ["250mg", "500mg", "875mg"],
-    manufacturer: "Generic Pharma"
+    manufacturer: "Generic Pharma",
+    price: 15.99
   },
   {
     name: "Ibuprofen",
     dosage_forms: ["Tablet", "Capsule", "Suspension"],
     strengths: ["200mg", "400mg", "600mg"],
-    manufacturer: "Pain Relief Inc"
+    manufacturer: "Pain Relief Inc",
+    price: 8.99
   }
 ];
+
+// Helper function to get medicine price
+const getMedicinePrice = (name: string): number => {
+  const medicine = medicineDatabase.find(med => 
+    med.name.toLowerCase() === name.toLowerCase()
+  );
+  return medicine?.price || 100; // Default price of 100 if medicine not found
+};
 
 const mockOrders: Order[] = [
   {
@@ -62,7 +74,7 @@ const mockOrders: Order[] = [
     ],
     status: "pending",
     date: "2024-03-15",
-    total: 45.99,
+    total: 479.70, // 30 * 15.99
     priority: "normal"
   },
   {
@@ -79,7 +91,7 @@ const mockOrders: Order[] = [
     ],
     status: "processing",
     date: "2024-03-15",
-    total: 12.99,
+    total: 179.80, // 20 * 8.99
     priority: "urgent"
   }
 ];
@@ -91,10 +103,26 @@ const findMatchingMedicine = (name: string): MedicineRecord | null => {
 };
 
 const PharmacistOrders = () => {
-  const [orders, setOrders] = useState<Order[]>(mockOrders);
+  const location = useLocation();
+  const [orders, setOrders] = useState<Order[]>(() => {
+    // If there's a new order in the location state, add it to the mock orders
+    const newOrder = location.state?.newOrder;
+    return newOrder ? [newOrder, ...mockOrders] : mockOrders;
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<Order['status'] | 'all'>('all');
   const [priorityFilter, setPriorityFilter] = useState<Order['priority'] | 'all'>('all');
+
+  // Show toast for new order
+  useEffect(() => {
+    if (location.state?.newOrder) {
+      toast.success('New order created', {
+        description: `Order ${location.state.newOrder.id} has been created and is pending processing.`
+      });
+      // Clear the location state
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   const handleStatusChange = (orderId: string, newStatus: Order['status']) => {
     setOrders(prev => prev.map(order => 
@@ -176,6 +204,7 @@ const PharmacistOrders = () => {
               <p>Available forms: {matchedDetails.dosage_forms.join(', ')}</p>
               <p>Strengths: {matchedDetails.strengths.join(', ')}</p>
               <p>Manufacturer: {matchedDetails.manufacturer}</p>
+              <p>Price: ₹{matchedDetails.price.toFixed(2)}</p>
             </div>
           )}
           
@@ -317,7 +346,7 @@ const PharmacistOrders = () => {
                   ))}
                   <div className="flex justify-end">
                     <p className="text-lg font-semibold text-gray-900">
-                      Total: ${order.total.toFixed(2)}
+                      Total: ₹{order.total.toFixed(2)}
                     </p>
                   </div>
                 </div>

@@ -7,6 +7,7 @@ import {
   AlertCircle, Filter, Download, ShoppingCart, AlertTriangle, Users, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 interface Medicine {
   id: string;
@@ -56,6 +57,29 @@ interface AudioRecorderState {
   mediaRecorder: MediaRecorder | null;
   audioChunks: Blob[];
 }
+
+interface MedicineRecord {
+  name: string;
+  short_composition1: string;
+  short_composition2: string;
+  price: number;
+}
+
+// Mock medicine database
+const medicineDatabase: MedicineRecord[] = [
+  {
+    name: "Amoxicillin 500mg",
+    short_composition1: "Amoxicillin",
+    short_composition2: "Penicillin",
+    price: 15.99
+  },
+  {
+    name: "Ibuprofen 400mg",
+    short_composition1: "Ibuprofen",
+    short_composition2: "NSAIDs",
+    price: 8.99
+  }
+];
 
 const mockPrescriptions: Prescription[] = [
   {
@@ -110,6 +134,7 @@ const PharmacistDashboard: React.FC = () => {
     mediaRecorder: null,
     audioChunks: [],
   });
+  const navigate = useNavigate();
 
   const handleFileUpload = async (file: File) => {
     if (!file) return;
@@ -141,14 +166,37 @@ const PharmacistDashboard: React.FC = () => {
       })) as OCRResult[];
       
       setResults(processedResults);
-      const summaryText = data.summary || 'No summary available';
+
+      // Format the summary with sections
+      const formattedSummary = `Patient Information:
+${data.structured_data.patient_name || 'Unknown Patient'}
+
+Doctor Information:
+Dr.Akshara
+SMS Hospital
+
+Date:
+${data.structured_data.date || new Date().toISOString().split('T')[0]}
+
+Prescribed Medications:
+${data.structured_data.medicines?.map(m => 
+  `• ${m.name}
+  Dosage: ${m.dosage}
+  Quantity: ${m.quantity}
+  ${m.instructions ? `Instructions: ${m.instructions}` : ''}`
+).join('\n\n') || 'No medicines found'}
+
+Special Instructions:
+${data.structured_data.medicines?.map(m => m.instructions).filter(Boolean).join('\n') || 'No special instructions'}`
+
+      const summaryText = data.summary || formattedSummary;
       setSummary(summaryText);
 
       // Add new prescription to the list
       const newPrescription: Prescription = {
         id: String(Date.now()),
         patientName: data.structured_data.patient_name || 'Unknown Patient',
-        doctorName: data.structured_data.doctor_name || 'Unknown Doctor',
+        doctorName: data.structured_data.doctor_name ? 'Dr.Akshara' : 'Unknown Doctor',
         date: data.structured_data.date || new Date().toISOString().split('T')[0],
         medicines: data.structured_data.medicines || [defaultMedicine],
         status: 'pending',
@@ -185,15 +233,71 @@ const PharmacistDashboard: React.FC = () => {
   };
 
   const handleStatusChange = (prescriptionId: string, newStatus: 'processed' | 'rejected') => {
-    setPrescriptions(prev =>
-      prev.map(p =>
-        p.id === prescriptionId ? { ...p, status: newStatus } : p
-      )
+    setPrescriptions(prev => prev.map(p => {
+      if (p.id === prescriptionId) {
+        // If the prescription is being processed, create an order
+        if (newStatus === 'processed') {
+          const order = {
+            id: `ORD-${Date.now()}`,
+            patientName: p.patientName,
+            medicines: p.medicines,
+            status: 'pending' as const,
+            date: new Date().toISOString().split('T')[0],
+            total: calculateTotal(p.medicines),
+            priority: 'normal' as const,
+            imageUrl: p.imageUrl
+          };
+
+          // Navigate to orders page with the new order
+          setTimeout(() => {
+            navigate('/pharmacist-dashboard/orders', { state: { newOrder: order } });
+          }, 500);
+        }
+        
+        return { ...p, status: newStatus };
+      }
+      return p;
+    }));
+
+    toast.success(`Prescription ${prescriptionId} has been ${newStatus}`);
+  };
+
+  // Helper function to find best matching medicine
+  const findBestMatchingMedicine = (name: string): MedicineRecord | null => {
+    // First try exact match
+    let medicine = medicineDatabase.find(med => 
+      med.name.toLowerCase() === name.toLowerCase()
     );
 
-    toast.success(`Prescription ${newStatus}`, {
-      description: `The prescription has been marked as ${newStatus}.`,
-    });
+    // If no exact match, try matching with compositions
+    if (!medicine) {
+      medicine = medicineDatabase.find(med => 
+        med.short_composition1.toLowerCase().includes(name.toLowerCase()) ||
+        med.short_composition2.toLowerCase().includes(name.toLowerCase())
+      );
+    }
+
+    return medicine;
+  };
+
+  // Update getMedicinePrice to use the new matching function
+  const getMedicinePrice = (name: string): number => {
+    const medicine = findBestMatchingMedicine(name);
+    return medicine?.price || 100; // Default price of 100 if medicine not found
+  };
+
+  // Helper function to calculate total price
+  const calculateTotal = (medicines: Medicine[]): number => {
+    return medicines.reduce((total, medicine) => {
+      // Try to find medicine in database first
+      const matchedMedicine = findBestMatchingMedicine(medicine.name);
+      const price = matchedMedicine?.price || 100; // Use database price or default to 100
+      const quantity = medicine.quantity || 1;
+      const medicineTotal = price * quantity;
+      
+      console.log(`Medicine: ${medicine.name}, Quantity: ${quantity}, Price: ₹${price}${matchedMedicine ? ' (from database)' : ''}, Total: ₹${medicineTotal}`);
+      return total + medicineTotal;
+    }, 0);
   };
 
   const filteredPrescriptions = prescriptions.filter(p =>
@@ -220,10 +324,10 @@ const PharmacistDashboard: React.FC = () => {
 
   const handleSave = () => {
     // Create new results with default box coordinates for edited text
-    const newResults: OCRResult[] = editedText.split('\n').map(text => ({
+    const newResults: OCRResult[] = editedText.split('\n').map((text, index) => ({
       text: text.trim(),
-      confidence: 1.0, // Default confidence since we can't determine it for edited text
-      box: [[0, 0], [100, 0], [100, 20], [0, 20]] // Default box coordinates
+      confidence: 1.0,
+      box: [[0, 0], [100, 0], [100, 20], [0, 20]]
     }));
     
     setResults(newResults);
@@ -444,11 +548,26 @@ const PharmacistDashboard: React.FC = () => {
                     <div className="grid gap-4 md:grid-cols-2">
                       <div>
                         <h4 className="font-medium text-gray-900 mb-2">Medicines</h4>
-                        {prescription.medicines.map((medicine) => (
-                          <div key={medicine.id} className="text-sm text-gray-700">
-                            • {medicine.name} - {medicine.dosage}
-                          </div>
-                        ))}
+                        {prescription.medicines.map((medicine) => {
+                          const matchedMedicine = findBestMatchingMedicine(medicine.name);
+                          const price = matchedMedicine?.price || 100;
+                          const quantity = medicine.quantity || 1;
+                          return (
+                            <div key={medicine.id} className="text-sm text-gray-700">
+                              • {medicine.name} - {medicine.dosage}
+                              <div className="ml-4 text-gray-500">
+                                Quantity: {quantity}
+                                <br />
+                                Price: ₹{price} per unit
+                                {matchedMedicine && (
+                                  <span className="text-green-600 ml-1">(from database)</span>
+                                )}
+                                <br />
+                                Total: ₹{quantity * price}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                       <div>
                         <h4 className="font-medium text-gray-900 mb-2">Details</h4>
@@ -457,30 +576,6 @@ const PharmacistDashboard: React.FC = () => {
                           <p>Confidence: {(prescription.confidence * 100).toFixed(1)}%</p>
                         </div>
                       </div>
-                      {prescription.summary && (
-                        <div className="md:col-span-2 mt-4">
-                          <h4 className="font-medium text-gray-900 mb-2">Prescription Details</h4>
-                          <div className="grid gap-4 md:grid-cols-2">
-                            {Object.entries(parseSummaryText(prescription.summary)).map(([section, items]) => {
-                              if (items.length === 0) return null;
-                              return (
-                                <div key={section} className="bg-green-50 p-3 rounded-lg">
-                                  <h5 className="font-medium text-gray-900 mb-2">
-                                    {section.replace(/([A-Z])/g, ' $1').trim()}
-                                  </h5>
-                                  <ul className="space-y-1">
-                                    {items.map((item, index) => (
-                                      <li key={index} className="text-sm text-gray-700">
-                                        • {item}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </Card>
@@ -633,9 +728,11 @@ const PharmacistDashboard: React.FC = () => {
                 <div className="p-4 bg-white rounded-lg shadow">
                   <h3 className="text-lg font-semibold mb-2">Extracted Text</h3>
                   <div className="p-4 bg-gray-50 rounded-lg">
-                    <p className="text-gray-700 whitespace-pre-wrap font-mono">
-                      {results.map(result => result.text).join('\n')}
-                    </p>
+                    {results.map((result, index) => (
+                      <div key={`result-${index}`} className="text-gray-700 whitespace-pre-wrap font-mono">
+                        {result.text}
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
