@@ -1,26 +1,67 @@
-# Welcome to your Lovable project
+# Welcome to MediFlow
 
-## Project info
+## Project Overview
 
-**URL**: https://lovable.dev/projects/45694a0a-d2c2-49b7-8f1f-8f10b831ea02
+**MediFlow** is an AI-powered healthcare assistant designed to automate **prescription processing, medical image analysis, and patient diagnosis**. It streamlines operations for **doctors, pharmacists, and patients**, ensuring accuracy, efficiency, and security in medical workflows.
 
-## How can I edit this code?
+## Features
 
-There are several ways of editing your application.
+### **1️⃣ Patient Panel:**
 
-**Use Lovable**
+- 🌡️ **AI Doctor Assistant**: Patients can input symptoms, and the system provides a preliminary diagnosis using the `facebook/bart-large-mnli` model.
+- 📅 **Appointment Booking**: Patients can schedule appointments with doctors based on their conditions.
+- 📦 **Order Tracking**: Patients can check the status of their prescriptions and orders.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/45694a0a-d2c2-49b7-8f1f-8f10b831ea02) and start prompting.
+### **2️⃣ Pharmacist Panel:**
 
-Changes made via Lovable will be committed automatically to this repo.
+- 📄 **Prescription Processing**: Pharmacists can upload handwritten or printed prescriptions.
+- 🔍 **Text Extraction (OCR Models)**:
+  - **PaddleOCR** (Higher accuracy for structured medical prescriptions).
+  - **EasyOCR** (Supports multilingual prescriptions).
+- 🏥 **Medical Term Recognition**: Extracted text is processed using a **BERT model** to prioritize medicines, dosages, and instructions.
+- 🤖 **Order Generation (LLM)**: A **large language model (LLM)** generates structured orders based on the prescription and patient needs.
+- 🎙 **Voice Prescription Support**: Converts **audio prescriptions to text**, processes it using **BERT → LLM pipeline**, and generates structured orders.
 
-**Use your preferred IDE**
+### **3️⃣ Doctor Panel:**
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+- 📷 **Medical Image Diagnosis**: Doctors can upload **X-ray and CT scan images**, and the system predicts diseases using:
+  - 🩻 **X-ray Model**: `lambdalabs/Chest-X-ray-Classification`
+  - 🧠 **CT Scan Model**: `UCSD-AI4H/chexnet`
+- 📝 **Symptom-Based Disease Prediction**: Doctors can input patient symptoms, and the system predicts potential diseases using the **BART model**.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## Security & Authentication
 
-Follow these steps:
+- 🔐 **Two-Factor Authentication (2FA)** for added security.
+- 🔄 **OAuth Integration** for secure and seamless logins.
+- 👥 **Role-Based Access Control (RBAC)** ensuring:
+  - ✅ Patients can only view orders and book appointments.
+  - ✅ Pharmacists can process prescriptions and generate orders.
+  - ✅ Doctors can diagnose diseases and upload medical data.
+
+---
+
+## **Technologies Used**
+
+This project is built with:
+
+- ⚡ **FastAPI** (Backend)
+- 🔥 **React + TypeScript + Vite** (Frontend)
+- 🎨 **shadcn-ui + Tailwind CSS** (UI Design)
+- 🏥 **Hugging Face Transformers** (AI Models for Diagnosis & Order Generation)
+- 📄 **PaddleOCR & EasyOCR** (Text Extraction from Prescriptions)
+- 🔐 **OAuth + 2FA + RBAC** (Security & Authentication)
+
+---
+
+## **How to Edit This Code**
+
+### **1️⃣ Use Lovable**
+
+Visit the [MediFlow Project](https://lovable.dev/projects/45694a0a-d2c2-49b7-8f1f-8f10b831ea02) and start making changes. Any updates made will be **automatically committed**.
+
+### **2️⃣ Use Your Preferred IDE**
+
+If you want to edit locally, follow these steps:
 
 ```sh
 # Step 1: Clone the repository using the project's Git URL.
@@ -32,38 +73,29 @@ cd <YOUR_PROJECT_NAME>
 # Step 3: Install the necessary dependencies.
 npm i
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Step 4: Start the development server with live reloading.
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### **3️⃣ Edit Directly on GitHub**
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- Navigate to the desired file.
+- Click the **Edit** button (pencil icon).
+- Make changes and commit them.
 
-**Use GitHub Codespaces**
+### **4️⃣ Use GitHub Codespaces**
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+- Open your repository and click the **Code** button.
+- Select the **Codespaces** tab.
+- Click **New Codespace** to launch an online development environment.
+- Edit, commit, and push changes directly from the browser.
 
-## What technologies are used for this project?
+---
 
-This project is built with .
+### **Can I Use a Custom Domain?**
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+Custom domains are **not supported yet**. If you need one, we recommend deploying your project using **Netlify**.
 
-## How can I deploy this project?
+---
 
-Simply open [Lovable](https://lovable.dev/projects/45694a0a-d2c2-49b7-8f1f-8f10b831ea02) and click on Share -> Publish.
-
-## I want to use a custom domain - is that possible?
-
-We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)
+🚀 **MediFlow: Transforming Healthcare with AI & Automation!**
