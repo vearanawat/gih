@@ -27,6 +27,7 @@ interface Prescription {
   confidence: number;
   originalText: string;
   imageUrl: string;
+  summary: string;
 }
 
 interface OCRResult {
@@ -50,6 +51,12 @@ interface ProcessedResult {
   };
 }
 
+interface AudioRecorderState {
+  isRecording: boolean;
+  mediaRecorder: MediaRecorder | null;
+  audioChunks: Blob[];
+}
+
 const mockPrescriptions: Prescription[] = [
   {
     id: '1',
@@ -69,7 +76,8 @@ const mockPrescriptions: Prescription[] = [
     status: 'pending',
     confidence: 0.92,
     originalText: 'Rx\nAmoxicillin 500mg\n#30\nTake 1 tablet twice daily',
-    imageUrl: ''
+    imageUrl: '',
+    summary: ''
   }
 ];
 
@@ -94,7 +102,14 @@ const PharmacistDashboard: React.FC = () => {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editedText, setEditedText] = useState('');
   const [summary, setSummary] = useState<string>('');
+  const [isEditingSummary, setIsEditingSummary] = useState(false);
+  const [editedSummary, setEditedSummary] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [audioState, setAudioState] = useState<AudioRecorderState>({
+    isRecording: false,
+    mediaRecorder: null,
+    audioChunks: [],
+  });
 
   const handleFileUpload = async (file: File) => {
     if (!file) return;
@@ -126,7 +141,8 @@ const PharmacistDashboard: React.FC = () => {
       })) as OCRResult[];
       
       setResults(processedResults);
-      setSummary(data.summary || 'No summary available');
+      const summaryText = data.summary || 'No summary available';
+      setSummary(summaryText);
 
       // Add new prescription to the list
       const newPrescription: Prescription = {
@@ -138,7 +154,8 @@ const PharmacistDashboard: React.FC = () => {
         status: 'pending',
         confidence: data.structured_data.confidence || 0.85,
         originalText: processedResults.map(r => r.text).join('\n'),
-        imageUrl: preview || ''
+        imageUrl: preview || '',
+        summary: summaryText
       };
 
       setPrescriptions(prev => [newPrescription, ...prev]);
@@ -215,6 +232,136 @@ const PharmacistDashboard: React.FC = () => {
     toast.success('Text updated successfully');
   };
 
+  const handleEditSummary = () => {
+    setEditedSummary(summary);
+    setIsEditingSummary(true);
+  };
+
+  const handleSaveSummary = () => {
+    setSummary(editedSummary);
+    setIsEditingSummary(false);
+    toast.success('Summary updated successfully');
+  };
+
+  const handleCancelSummary = () => {
+    setIsEditingSummary(false);
+    setEditedSummary(summary);
+  };
+
+  // Add this function to parse the summary text
+  const parseSummaryText = (summaryText: string) => {
+    const sections: { [key: string]: string[] } = {
+      patientInfo: [],
+      doctorInfo: [],
+      medications: [],
+      instructions: [],
+      dates: []
+    };
+
+    const lines = summaryText.split('\n');
+    let currentSection = '';
+
+    lines.forEach(line => {
+      line = line.trim();
+      if (!line) return;
+
+      if (line.includes('Patient Information:')) {
+        currentSection = 'patientInfo';
+      } else if (line.includes('Doctor Information:')) {
+        currentSection = 'doctorInfo';
+      } else if (line.includes('Prescribed Medications:')) {
+        currentSection = 'medications';
+      } else if (line.includes('Special Instructions:')) {
+        currentSection = 'instructions';
+      } else if (line.includes('Date:')) {
+        currentSection = 'dates';
+      } else if (currentSection && !line.includes(':')) {
+        sections[currentSection].push(line);
+      }
+    });
+
+    return sections;
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      const audioChunks: Blob[] = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        audioChunks.push(event.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+        await handleAudioUpload(audioBlob);
+      };
+
+      mediaRecorder.start();
+      setAudioState({
+        isRecording: true,
+        mediaRecorder,
+        audioChunks,
+      });
+
+      toast.success('Recording started');
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      toast.error('Failed to start recording');
+    }
+  };
+
+  const stopRecording = () => {
+    if (audioState.mediaRecorder && audioState.isRecording) {
+      audioState.mediaRecorder.stop();
+      audioState.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+      setAudioState(prev => ({ ...prev, isRecording: false }));
+      toast.success('Recording stopped');
+    }
+  };
+
+  const handleAudioUpload = async (audioBlob: Blob) => {
+    setIsProcessing(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', audioBlob, 'prescription_audio.wav');
+
+      const response = await fetch('http://localhost:8000/transcribe-audio', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to transcribe audio');
+      }
+
+      const data = await response.json();
+      
+      // Create a new prescription from the transcribed data
+      const newPrescription: Prescription = {
+        id: String(prescriptions.length + 1),
+        patientName: data.structured_data.patient_name,
+        doctorName: data.structured_data.doctor_name,
+        date: data.structured_data.date,
+        medicines: data.structured_data.medicines,
+        status: 'pending',
+        confidence: 0.9,
+        originalText: data.transcribed_text,
+        imageUrl: '',
+        summary: data.transcribed_text,
+      };
+
+      setPrescriptions(prev => [...prev, newPrescription]);
+      toast.success('Audio transcribed successfully');
+    } catch (error) {
+      console.error('Error transcribing audio:', error);
+      toast.error('Failed to transcribe audio');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <div className="fade-in p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
@@ -250,30 +397,7 @@ const PharmacistDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Display Summary First */}
-            {summary && (
-              <div className="mb-6 bg-green-50 rounded-lg p-4 border border-green-100">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Prescription Summary</h3>
-                <p className="text-gray-700">{summary}</p>
-              </div>
-            )}
-
-            {/* Display Extracted Text */}
-            {results.length > 0 && (
-              <div className="mt-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Extracted Text</h3>
-                <div className="space-y-2">
-                  {results.map((result, index) => (
-                    <div key={index} className="p-3 bg-gray-50 rounded-lg">
-                      <p className="text-gray-700">{result.text}</p>
-                      <p className="text-sm text-gray-500 mt-1">
-                        Confidence: {(result.confidence * 100).toFixed(1)}%
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+           
 
             <div className="space-y-4">
               {filteredPrescriptions.map((prescription) => (
@@ -333,6 +457,30 @@ const PharmacistDashboard: React.FC = () => {
                           <p>Confidence: {(prescription.confidence * 100).toFixed(1)}%</p>
                         </div>
                       </div>
+                      {prescription.summary && (
+                        <div className="md:col-span-2 mt-4">
+                          <h4 className="font-medium text-gray-900 mb-2">Prescription Details</h4>
+                          <div className="grid gap-4 md:grid-cols-2">
+                            {Object.entries(parseSummaryText(prescription.summary)).map(([section, items]) => {
+                              if (items.length === 0) return null;
+                              return (
+                                <div key={section} className="bg-green-50 p-3 rounded-lg">
+                                  <h5 className="font-medium text-gray-900 mb-2">
+                                    {section.replace(/([A-Z])/g, ' $1').trim()}
+                                  </h5>
+                                  <ul className="space-y-1">
+                                    {items.map((item, index) => (
+                                      <li key={index} className="text-sm text-gray-700">
+                                        • {item}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </Card>
@@ -433,15 +581,61 @@ const PharmacistDashboard: React.FC = () => {
           <div className="space-y-4">
             {results && results.length > 0 ? (
               <div className="space-y-4">
+                {/* Display Summary First */}
+                {summary && (
+                  <div className="mb-6 bg-green-50 rounded-lg p-6 border border-green-200 shadow-sm">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-xl font-semibold text-gray-900">Prescription Summary</h3>
+                      {!isEditingSummary ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleEditSummary}
+                        >
+                          <Edit className="w-4 h-4 mr-2" />
+                          Edit Summary
+                        </Button>
+                      ) : (
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleCancelSummary}
+                          >
+                            <X className="w-4 h-4 mr-2" />
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={handleSaveSummary}
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                          >
+                            <Check className="w-4 h-4 mr-2" />
+                            Save
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    {isEditingSummary ? (
+                      <textarea
+                        value={editedSummary}
+                        onChange={(e) => setEditedSummary(e.target.value)}
+                        className="w-full h-48 p-3 rounded-md border border-gray-300 focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                      />
+                    ) : (
+                      <div className="text-gray-700 whitespace-pre-line">
+                        {summary}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {/* Extracted Text Section */}
                 <div className="p-4 bg-white rounded-lg shadow">
                   <h3 className="text-lg font-semibold mb-2">Extracted Text</h3>
-                  <div className="space-y-2">
-                    {results.map((result, index) => (
-                      <div key={index} className="p-3 bg-gray-50 rounded-lg">
-                        <p className="text-gray-900 font-mono">{result.text}</p>
-                      </div>
-                    ))}
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <p className="text-gray-700 whitespace-pre-wrap font-mono">
+                      {results.map(result => result.text).join('\n')}
+                    </p>
                   </div>
                 </div>
               </div>

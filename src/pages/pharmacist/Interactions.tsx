@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, AlertTriangle, Info, Plus, X } from 'lucide-react';
 import { toast } from "sonner";
 
-interface Drug {
+interface Drug{
   name: string;
   dosage: string;
   frequency: string;
@@ -18,17 +18,11 @@ interface Interaction {
   drugs: string[];
 }
 
-const mockDrugs = [
-  "Amoxicillin",
-  "Ibuprofen",
-  "Metformin",
-  "Lisinopril",
-  "Omeprazole",
-  "Simvastatin",
-  "Sertraline",
-  "Metoprolol",
-  "Amlodipine",
-  "Gabapentin"
+const mockDrugs: string[] = [
+  'Aspirin',
+  'Ibuprofen',
+  'Omeprazole',
+  'Metformin'
 ];
 
 const mockInteractions: Interaction[] = [
@@ -51,6 +45,24 @@ const PharmacistInteractions = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [newDrug, setNewDrug] = useState('');
+  const [availableDrugs, setAvailableDrugs] = useState<string[]>(mockDrugs);
+
+  useEffect(() => {
+    // Fetch drugs from backend
+    const fetchDrugs = async () => {
+      try {
+        const response = await fetch('/api/drugs');
+        const data = await response.json();
+        setAvailableDrugs(data);
+      } catch (error) {
+        console.error('Error fetching drugs:', error);
+        // Fallback to mock data if API fails
+        setAvailableDrugs(mockDrugs);
+      }
+    };
+
+    fetchDrugs();
+  }, []);
 
   const handleAddDrug = () => {
     if (!newDrug) return;
@@ -83,7 +95,7 @@ const PharmacistInteractions = () => {
     setInteractions([]);
   };
 
-  const filteredDrugs = mockDrugs.filter(drug =>
+  const filteredDrugs = availableDrugs.filter(drug =>
     drug.toLowerCase().includes(searchQuery.toLowerCase()) &&
     !selectedDrugs.some(selected => selected.name.toLowerCase() === drug.toLowerCase())
   );
