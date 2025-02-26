@@ -7,13 +7,11 @@
 ## Features
 
 ### **1️⃣ Patient Panel:**
-
 - 🌡️ **AI Doctor Assistant**: Patients can input symptoms, and the system provides a preliminary diagnosis using the `facebook/bart-large-mnli` model.
 - 📅 **Appointment Booking**: Patients can schedule appointments with doctors based on their conditions.
 - 📦 **Order Tracking**: Patients can check the status of their prescriptions and orders.
 
 ### **2️⃣ Pharmacist Panel:**
-
 - 📄 **Prescription Processing**: Pharmacists can upload handwritten or printed prescriptions.
 - 🔍 **Text Extraction (OCR Models)**:
   - **PaddleOCR** (Higher accuracy for structured medical prescriptions).
@@ -23,14 +21,12 @@
 - 🎙 **Voice Prescription Support**: Converts **audio prescriptions to text**, processes it using **BERT → LLM pipeline**, and generates structured orders.
 
 ### **3️⃣ Doctor Panel:**
-
 - 📷 **Medical Image Diagnosis**: Doctors can upload **X-ray and CT scan images**, and the system predicts diseases using:
   - 🩻 **X-ray Model**: `lambdalabs/Chest-X-ray-Classification`
   - 🧠 **CT Scan Model**: `UCSD-AI4H/chexnet`
 - 📝 **Symptom-Based Disease Prediction**: Doctors can input patient symptoms, and the system predicts potential diseases using the **BART model**.
 
 ## Security & Authentication
-
 - 🔐 **Two-Factor Authentication (2FA)** for added security.
 - 🔄 **OAuth Integration** for secure and seamless logins.
 - 👥 **Role-Based Access Control (RBAC)** ensuring:
@@ -41,9 +37,7 @@
 ---
 
 ## **Technologies Used**
-
 This project is built with:
-
 - ⚡ **FastAPI** (Backend)
 - 🔥 **React + TypeScript + Vite** (Frontend)
 - 🎨 **shadcn-ui + Tailwind CSS** (UI Design)
@@ -53,48 +47,59 @@ This project is built with:
 
 ---
 
+## **Setup & Environment Configuration**
+To run this project, you need to configure environment variables.
+
+### **1️⃣ Backend Setup**
+#### **.env file (backend folder)**
+Create a `.env` file inside the **backend** directory and add the following:
+```sh
+GROQ_API_KEY=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
+HUGGINGFACE_API_KEY=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
+```
+#### **Install dependencies and run the backend**
+```sh
+cd backend  # Navigate to backend folder
+pip install -r requirements.txt  # Install dependencies
+uvicorn combined_app:app --reload --host 0.0.0.0 --port 8000  # Run the FastAPI backend
+```
+
+### **2️⃣ Frontend Setup**
+#### **.env file (frontend folder)**
+Create a `.env` file inside the **frontend** directory and add the following:
+```sh
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_dGVuZGVyLXJhdHRsZXItNzUuY2xlcmsuYWNjb3VudHMuZGV2JA
+```
+#### **Install dependencies and run the frontend**
+```sh
+cd frontend  # Navigate to frontend folder
+npm install  # Install dependencies
+npm run dev  # Start the frontend server
+```
+
+---
+
 ## **How to Edit This Code**
 
-### **1️⃣ Use Lovable**
-
-Visit the [MediFlow Project](https://lovable.dev/projects/45694a0a-d2c2-49b7-8f1f-8f10b831ea02) and start making changes. Any updates made will be **automatically committed**.
-
-### **2️⃣ Use Your Preferred IDE**
-
+### **3️⃣ Use Your Preferred IDE**
 If you want to edit locally, follow these steps:
 
 ```sh
 # Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+git clone https://github.com/vearanawat/Girl-Hackathon_2025.git
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
+# Step 2: Install the necessary dependencies.
 npm i
 
-# Step 4: Start the development server with live reloading.
+# Step 3: Start the development server with live reloading.
 npm run dev
 ```
 
-### **3️⃣ Edit Directly on GitHub**
-
-- Navigate to the desired file.
-- Click the **Edit** button (pencil icon).
-- Make changes and commit them.
-
 ### **4️⃣ Use GitHub Codespaces**
-
 - Open your repository and click the **Code** button.
 - Select the **Codespaces** tab.
 - Click **New Codespace** to launch an online development environment.
 - Edit, commit, and push changes directly from the browser.
-
----
-
-### **Can I Use a Custom Domain?**
-
-Custom domains are **not supported yet**. If you need one, we recommend deploying your project using **Netlify**.
 
 ---
 
