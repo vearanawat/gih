@@ -14,10 +14,14 @@ from fastapi.responses import JSONResponse
 import easyocr
 import logging
 from typing import List, Dict, Any
+import speech_recognition as sr
+from pydub import AudioSegment
+import tempfile
 
 # Load environment variables from .env file
 load_dotenv()
 
+# Create a standalone FastAPI app for direct usage
 app = FastAPI()
 
 # Add CORS middleware
@@ -127,20 +131,62 @@ def extract_date(text):
 
 def extract_names(text):
     """Extract potential patient and doctor names."""
-    name_patterns = [
-        r'Dr\.\s[A-Z][a-z]+\s[A-Z][a-z]+',
-        r'Patient:\s[A-Z][a-z]+\s[A-Z][a-z]+',
-        r'Name:\s[A-Z][a-z]+\s[A-Z][a-z]+'
-    ]
-    
+    # Default values
     doctor_name = ""
     patient_name = ""
     
-    for line in text.split('\n'):
-        if 'Dr.' in line:
-            doctor_name = line.strip()
-        elif 'Patient:' in line or 'Name:' in line:
-            patient_name = line.split(':')[-1].strip()
+    # More specific patterns for doctor names
+    doctor_patterns = [
+        r'Dr\.\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',  # Dr. Lastname or Dr. Firstname Lastname
+        r'Doctor:\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',  # Doctor: Name
+        r'Physician:\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)'  # Physician: Name
+    ]
+    
+    # More specific patterns for patient names
+    patient_patterns = [
+        r'Patient:\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',  # Patient: Name
+        r'Name:\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',  # Name: Name
+        r'Patient Name:\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)'  # Patient Name: Name
+    ]
+    
+    # Try to extract doctor name using patterns
+    for pattern in doctor_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            doctor_name = match.group(1).strip()
+            break
+    
+    # Try to extract patient name using patterns
+    for pattern in patient_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            patient_name = match.group(1).strip()
+            break
+    
+    # If no patterns matched, try line-by-line approach as fallback
+    if not doctor_name or not patient_name:
+        for line in text.split('\n'):
+            line = line.strip()
+            if not doctor_name and ('Dr.' in line or 'Doctor:' in line or 'Physician:' in line):
+                # Extract name after Dr./Doctor:/Physician:
+                parts = re.split(r'Dr\.|Doctor:|Physician:', line, 1)
+                if len(parts) > 1:
+                    doctor_name = parts[1].strip()
+            
+            if not patient_name and ('Patient:' in line or 'Name:' in line or 'Patient Name:' in line):
+                # Extract name after Patient:/Name:/Patient Name:
+                parts = re.split(r'Patient:|Name:|Patient Name:', line, 1)
+                if len(parts) > 1:
+                    patient_name = parts[1].strip()
+    
+    # If we still don't have names, try to extract any capitalized words that might be names
+    if not doctor_name and not patient_name:
+        # Look for capitalized words that might be names
+        name_candidates = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\b', text)
+        if len(name_candidates) >= 2:
+            # Assume first is patient, second is doctor (or vice versa)
+            patient_name = name_candidates[0]
+            doctor_name = name_candidates[1]
             
     return patient_name, doctor_name
 
@@ -158,20 +204,294 @@ def extract_medicines(text):
         for pattern in medicine_patterns:
             matches = re.finditer(pattern, line, re.IGNORECASE)
             for match in matches:
-                medicine = {
-                    'name': match.group('name'),
-                    'dosage': match.group('dosage') if 'dosage' in match.groupdict() else '',
-                    'quantity': 0,
-                    'confidence': 0.9
-                }
-                medicines.append(medicine)
+                try:
+                    medicine = {
+                        'name': match.group('name'),
+                        'dosage': match.group('dosage') if 'dosage' in match.groupdict() else '',
+                        'quantity': 0,
+                        'confidence': 0.9
+                    }
+                    medicines.append(medicine)
+                except IndexError:
+                    # Skip if group not found
+                    continue
     
     return medicines
 
-@app.get("/")
-async def root():
-    return {"status": "healthy", "message": "OCR Service is running"}
+def convert_audio_to_wav(audio_bytes):
+    """Convert audio bytes to WAV format using pydub."""
+    temp_dir = None
+    temp_input_path = None
+    temp_output_path = None
+    
+    try:
+        # Create a temporary directory for our files
+        temp_dir = tempfile.mkdtemp()
+        temp_input_path = os.path.join(temp_dir, 'input.webm')  # Explicitly use .webm extension
+        temp_output_path = os.path.join(temp_dir, 'output.wav')
+        
+        # Write the audio bytes to a temporary file
+        with open(temp_input_path, 'wb') as f:
+            f.write(audio_bytes)
+        
+        try:
+            # Try to load as WebM first
+            try:
+                logger.info("Attempting to convert WebM audio...")
+                audio = AudioSegment.from_file(temp_input_path, format='webm')
+                logger.info("Successfully loaded WebM audio")
+            except Exception as webm_error:
+                logger.error(f"WebM conversion failed: {str(webm_error)}")
+                # Try as WAV
+                try:
+                    logger.info("Attempting to convert as WAV...")
+                    audio = AudioSegment.from_wav(temp_input_path)
+                    logger.info("Successfully loaded WAV audio")
+                except Exception as wav_error:
+                    logger.error(f"WAV conversion failed: {str(wav_error)}")
+                    # Try as generic format
+                    try:
+                        logger.info("Attempting to convert as generic format...")
+                        audio = AudioSegment.from_file(temp_input_path)
+                        logger.info("Successfully loaded audio in generic format")
+                    except Exception as generic_error:
+                        logger.error(f"Generic format conversion failed: {str(generic_error)}")
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Could not convert audio file. Please try recording again."
+                        )
 
+            # Process the audio
+            logger.info("Processing audio...")
+            audio = audio.set_channels(1)  # Convert to mono
+            audio = audio.set_frame_rate(16000)  # Set sample rate to 16kHz
+            
+            # Export as WAV
+            logger.info("Exporting to WAV format...")
+            audio.export(temp_output_path, format='wav')
+            logger.info("Successfully exported to WAV")
+            
+            # Verify the output file
+            if not os.path.exists(temp_output_path):
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to create output file"
+                )
+            
+            if os.path.getsize(temp_output_path) == 0:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Output file is empty"
+                )
+            
+            logger.info("Audio conversion completed successfully")
+            return temp_output_path, temp_dir
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error during audio conversion: {str(e)}")
+            cleanup_files(temp_input_path, temp_output_path, temp_dir)
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to process audio file. Please try recording again."
+            )
+            
+    except Exception as e:
+        logger.error(f"Error in audio handling: {str(e)}")
+        cleanup_files(temp_input_path, temp_output_path, temp_dir)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to process audio file. Please try again."
+        )
+
+def cleanup_files(input_path: str = None, output_path: str = None, dir_path: str = None):
+    """Helper function to clean up temporary files."""
+    try:
+        # Close any open file handles
+        import gc
+        gc.collect()
+        
+        # Remove input file if it exists
+        if input_path and os.path.exists(input_path):
+            try:
+                os.remove(input_path)
+            except Exception as e:
+                logger.warning(f"Failed to remove input file: {str(e)}")
+        
+        # Remove output file if it exists
+        if output_path and os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except Exception as e:
+                logger.warning(f"Failed to remove output file: {str(e)}")
+        
+        # Remove directory if it exists
+        if dir_path and os.path.exists(dir_path):
+            try:
+                os.rmdir(dir_path)
+            except Exception as e:
+                logger.warning(f"Failed to remove temporary directory: {str(e)}")
+                
+    except Exception as e:
+        logger.warning(f"Error during cleanup: {str(e)}")
+
+def transcribe_audio_file(audio_file_path):
+    """Transcribe audio file using speech recognition."""
+    try:
+        # Initialize recognizer
+        recognizer = sr.Recognizer()
+        
+        # Load the audio file
+        with sr.AudioFile(audio_file_path) as source:
+            # Record the audio data
+            audio_data = recognizer.record(source)
+            
+            try:
+                # Try Google Speech Recognition
+                text = recognizer.recognize_google(audio_data)
+                logger.info("Successfully transcribed audio using Google Speech Recognition")
+                return text
+            except sr.RequestError as e:
+                logger.error(f"Could not request results from Google Speech Recognition service: {e}")
+                raise
+            except sr.UnknownValueError:
+                logger.error("Google Speech Recognition could not understand audio")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Could not understand audio. Please speak clearly and try again."
+                )
+            
+    except Exception as e:
+        logger.error(f"Error in transcribe_audio_file: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to process audio file. Please try again."
+        )
+
+# Define a function to add OCR routes to a FastAPI app
+def add_ocr_routes(app: FastAPI):
+    @app.get("/ocr-status")
+    async def ocr_status():
+        return {"status": "healthy", "message": "OCR Service is running"}
+
+    @app.post("/transcribe-audio")
+    async def transcribe_audio(audio_file: UploadFile = File(...)):
+        """
+        Endpoint to transcribe audio file and extract information.
+        """
+        if not audio_file:
+            raise HTTPException(
+                status_code=400,
+                detail="No audio file provided"
+            )
+            
+        if not audio_file.filename:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid audio file"
+            )
+            
+        # Check file size (limit to 10MB)
+        file_size = 0
+        content = await audio_file.read()
+        file_size = len(content)
+        if file_size > 10 * 1024 * 1024:  # 10MB
+            raise HTTPException(
+                status_code=400,
+                detail="Audio file too large. Maximum size is 10MB."
+            )
+            
+        wav_path = None
+        temp_dir = None
+        
+        try:
+            # Convert audio to WAV format
+            wav_path, temp_dir = convert_audio_to_wav(content)
+            
+            # Initialize recognizer
+            recognizer = sr.Recognizer()
+            
+            # Read the audio file
+            with sr.AudioFile(wav_path) as source:
+                # Adjust for ambient noise and set energy threshold
+                recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                recognizer.energy_threshold = 300  # Adjust this value based on your needs
+                
+                # Record the audio data
+                audio_data = recognizer.record(source)
+                
+                try:
+                    # Attempt to transcribe using Google Speech Recognition
+                    text = recognizer.recognize_google(audio_data)
+                    
+                    if not text:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="No speech detected in the audio"
+                        )
+                    
+                    # Extract information from transcribed text
+                    patient_name, doctor_name = extract_names(text)
+                    date = extract_date(text)
+                    medicines = extract_medicines(text)
+                    
+                    return JSONResponse(content={
+                        "success": True,
+                        "transcribed_text": text,
+                        "structured_data": {
+                            "patient_name": patient_name or "Not found",
+                            "doctor_name": doctor_name or "Not found",
+                            "date": date or "Not found",
+                            "medicines": medicines or []
+                        }
+                    })
+                    
+                except sr.RequestError as e:
+                    # Try using offline recognition as fallback
+                    try:
+                        text = recognizer.recognize_sphinx(audio_data)
+                        if text:
+                            return JSONResponse(content={
+                                "success": True,
+                                "transcribed_text": text,
+                                "note": "Used offline recognition (lower accuracy)",
+                                "structured_data": {
+                                    "patient_name": "Not found",
+                                    "doctor_name": "Not found",
+                                    "date": "Not found",
+                                    "medicines": []
+                                }
+                            })
+                    except:
+                        raise HTTPException(
+                            status_code=503,
+                            detail="Speech recognition services unavailable. Please try again later."
+                        )
+                except sr.UnknownValueError:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Could not understand the audio. Please speak clearly and try again."
+                    )
+                except Exception as e:
+                    logger.error(f"Error during transcription: {str(e)}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Error processing audio. Please try again."
+                    )
+                
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail="An unexpected error occurred. Please try again."
+            )
+        finally:
+            # Clean up temporary files
+            cleanup_files(None, wav_path, temp_dir)
+    
 @app.post("/process-prescription")
 async def process_prescription(file: UploadFile = File(...)):
     try:
@@ -230,6 +550,7 @@ async def process_prescription(file: UploadFile = File(...)):
         
         return {
             "results": extracted_data["extracted_data"],
+            "summary": extracted_data["summary"],
             "structured_data": {
                 "patient_name": patient_name,
                 "doctor_name": doctor_name,
@@ -237,368 +558,16 @@ async def process_prescription(file: UploadFile = File(...)):
                 "medicines": medicines,
                 "confidence": avg_confidence,
                 "raw_text": full_text
-            },
-            "annotated_image": annotated_image_bytes
+            }
         }
-
-
-
-
-        
     except Exception as e:
         print(f"Error processing image: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
 
+# Add routes to the standalone app
+add_ocr_routes(app)
 
-
-##################### Multilingual OCR #####################
-
-# Initialize EasyOCR reader
-def get_easyocr_reader(lang_pair=['en']):
-    try:
-        return easyocr.Reader(lang_pair)
-    except Exception as e:
-        logger.error(f"Error initializing EasyOCR: {e}")
-        return None
-
-def calculate_iou(box1, box2):
-    # Convert boxes to format [x1, y1, x2, y2]
-    def get_box_coords(box):
-        return [
-            min(p[0] for p in box),
-            min(p[1] for p in box),
-            max(p[0] for p in box),
-            max(p[1] for p in box)
-        ]
-    
-    box1_coords = get_box_coords(box1)
-    box2_coords = get_box_coords(box2)
-    
-    # Calculate intersection
-    x1 = max(box1_coords[0], box2_coords[0])
-    y1 = max(box1_coords[1], box2_coords[1])
-    x2 = min(box1_coords[2], box2_coords[2])
-    y2 = min(box1_coords[3], box2_coords[3])
-    
-    intersection = max(0, x2 - x1) * max(0, y2 - y1)
-    
-    # Calculate areas
-    box1_area = (box1_coords[2] - box1_coords[0]) * (box1_coords[3] - box1_coords[1])
-    box2_area = (box2_coords[2] - box2_coords[0]) * (box2_coords[3] - box2_coords[1])
-    
-    # Calculate IoU
-    union = box1_area + box2_area - intersection
-    return intersection / union if union > 0 else 0
-
-def remove_duplicates(results, iou_threshold=0.5):
-    filtered_results = []
-    used = set()
-    
-    for i, res1 in enumerate(results):
-        if i in used:
-            continue
-            
-        current_group = [res1]
-        used.add(i)
-        
-        for j, res2 in enumerate(results[i+1:], i+1):
-            if j in used:
-                continue
-                
-            # Calculate IoU between boxes
-            box1 = np.array(res1[0])
-            box2 = np.array(res2[0])
-            iou = calculate_iou(box1, box2)
-            
-            if iou > iou_threshold:
-                current_group.append(res2)
-                used.add(j)
-        
-        # From the current group, select the one with highest confidence
-        best_result = max(current_group, key=lambda x: x[2] if len(x) > 2 else 0)
-        filtered_results.append(best_result)
-    
-    return filtered_results
-
-def extract_text_and_confidence_easyocr(results):
-    """Extract text and confidence scores from EasyOCR result."""
-    extracted_data = []
-    combined_text = ""
-    
-    for bbox, text, prob in results:
-        # Add to combined text for summarization
-        combined_text += text + " "
-        
-        extracted_data.append({
-            "text": text,
-            "confidence": float(prob),
-            "box": bbox
-        })
-    
-    # Get summary using Groq if text is available
-    summary = ""
-    if combined_text.strip():
-        try:
-            chat_completion = groq_client.chat.completions.create(
-                messages=[{
-                    "role": "user",
-                    "content": f"""
-You are a highly specialized AI trained in medical terminology, prescriptions, and pharmaceutical guidelines. 
-Your task is to summarize the given medical prescription text while prioritizing **medicine names, dosages, 
-frequencies, duration, medical conditions, and important instructions.**  
-
-### **Instructions:**  
-- **Extract and emphasize medicine names** mentioned in the text.  
-- **Highlight dosages, intake frequency, and duration** (e.g., "500mg, twice a day for 5 days").  
-- **Identify any diseases or medical conditions** mentioned in the prescription.  
-- **Retain important doctor instructions** (e.g., "Take before meals", "Avoid alcohol", "Complete full course").  
-- **Ignore irrelevant details** like hospital branding, unnecessary general text, or non-medical content.  
-
-### **Prescription Text:**  
-{combined_text}  
-
-### **Expected Output:**  
-A concise summary focusing only on **medical aspects**, ensuring that key prescription details (medicines, 
-dosages, diseases, and instructions) are retained accurately.
-"""
-                }],
-                model="llama-3.3-70b-versatile",
-            )
-            summary = chat_completion.choices[0].message.content
-        except Exception as e:
-            print(f"Error getting summary: {e}")
-            summary = "Error generating summary"
-    
-    return {
-        "extracted_data": extracted_data,
-        "summary": summary,
-        "full_text": combined_text.strip()
-    }
-
-def create_annotated_image(image, results):
-    # Convert PIL Image to numpy array if needed
-    if isinstance(image, Image.Image):
-        image = np.array(image)
-    
-    annotated = image.copy()
-    
-    for result in results:
-        box = result[0]
-        text = result[1]
-        
-        # Convert box points to numpy array
-        box = np.array(box, dtype=np.int32)
-        
-        # Draw the bounding box
-        cv2.polylines(annotated, [box], True, (0, 255, 0), 2)
-        
-        # Add text above the box
-        x = min(p[0] for p in box)
-        y = min(p[1] for p in box) - 10
-        cv2.putText(annotated, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-    
-    return Image.fromarray(annotated)
-
-# Add this new route to your FastAPI app
-@app.post("/process-multilingual")
-async def process_multilingual(file: UploadFile = File(...)):
-    try:
-        # Define language pairs (each with English)
-        language_pairs = [
-            ['en', 'hi'],  # English + Hindi
-            ['en', 'bn'],  # English + Bengali
-            ['en', 'ta'],  # English + Tamil
-            ['en', 'te'],  # English + Telugu
-            ['en', 'kn'],  # English + Kannada
-        ]
-        
-        # Read image file
-        contents = await file.read()
-        image = Image.open(io.BytesIO(contents))
-        
-        # Convert PIL Image to numpy array
-        img_array = np.array(image)
-        
-        all_results = []
-        processing_times = {}
-        
-        # Process with each language pair
-        for lang_pair in language_pairs:
-            try:
-                start_time = time.time()
-                reader = get_easyocr_reader(lang_pair)
-                if not reader:
-                    continue
-                
-                # Perform OCR
-                results = reader.readtext(img_array)
-                processing_time = time.time() - start_time
-                processing_times["-".join(lang_pair)] = processing_time
-                
-                all_results.extend(results)
-                
-            except Exception as e:
-                print(f"Error processing {lang_pair}: {str(e)}")
-        
-        if not all_results:
-            return {
-                "results": [],
-                "message": "No text detected in image"
-            }
-        
-        # Remove duplicates based on bounding box overlap
-        final_results = remove_duplicates(all_results)
-        
-        # Extract text and confidence scores
-        extracted_data = extract_text_and_confidence_easyocr(final_results)
-        
-        # Generate annotated image
-        try:
-            annotated_image = create_annotated_image(image, final_results)
-            
-            # Save annotated image to bytes
-            img_byte_arr = io.BytesIO()
-            annotated_image.save(img_byte_arr, format='PNG')
-            annotated_image_bytes = img_byte_arr.getvalue()
-            
-        except Exception as e:
-            print(f"Error generating annotated image: {str(e)}")
-            annotated_image_bytes = None
-        
-        # Calculate average confidence
-        confidences = [item["confidence"] for item in extracted_data["extracted_data"]]
-        avg_confidence = sum(confidences) / len(confidences) if confidences else 0
-        
-        # Extract text by language (basic approach)
-        language_texts = {}
-        for lang_pair in language_pairs:
-            lang_code = lang_pair[1]  # Non-English language code
-            language_texts[lang_code] = []
-        
-        # Just collecting all texts (a smarter approach would use language detection)
-        full_text = extracted_data["full_text"]
-        
-        return {
-            "results": extracted_data["extracted_data"],
-            "structured_data": {
-                "raw_text": full_text,
-                "confidence": avg_confidence,
-                "processing_times": processing_times,
-                "languages_detected": list(language_pairs)
-            },
-            "annotated_image": annotated_image_bytes
-        }
-        
-    except Exception as e:
-        print(f"Error processing multilingual image: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing multilingual image: {str(e)}")
-
-def add_ocr_routes(app: FastAPI):
-    reader = get_easyocr_reader()
-    
-    @app.post("/ocr/process-prescription")
-    async def process_prescription(file: UploadFile = File(...)):
-        """Process a prescription image using OCR."""
-        try:
-            # Read and validate the image
-            contents = await file.read()
-            image = Image.open(io.BytesIO(contents))
-            
-            # Convert image to RGB if necessary
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
-            
-            # Perform OCR
-            results = reader.readtext(np.array(image))
-            
-            # Remove duplicate detections
-            filtered_results = remove_duplicates(results)
-            
-            # Extract text and confidence
-            text, confidence = extract_text_and_confidence(filtered_results)
-            
-            # Create annotated image
-            annotated_image = create_annotated_image(image, filtered_results)
-            
-            # Convert annotated image to bytes
-            annotated_bytes = io.BytesIO()
-            annotated_image.save(annotated_bytes, format='PNG')
-            
-            return {
-                "text": text,
-                "confidence": confidence,
-                "word_count": len(text.split()),
-                "details": [
-                    {
-                        "text": r[1],
-                        "confidence": r[2] if len(r) > 2 else 0,
-                        "box": r[0]
-                    } for r in filtered_results
-                ]
-            }
-            
-        except Exception as e:
-            logger.error(f"Error processing prescription: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
-    
-    @app.post("/ocr/process-multilingual")
-    async def process_multilingual(
-        file: UploadFile = File(...),
-        languages: List[str] = ['en']  # Default to English
-    ):
-        """Process an image with multilingual OCR support."""
-        try:
-            # Initialize reader with specified languages
-            multi_reader = get_easyocr_reader(languages)
-            if not multi_reader:
-                raise HTTPException(status_code=500, detail="Failed to initialize OCR reader")
-            
-            # Read and validate the image
-            contents = await file.read()
-            image = Image.open(io.BytesIO(contents))
-            
-            # Convert image to RGB if necessary
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
-            
-            # Perform OCR
-            results = multi_reader.readtext(np.array(image))
-            
-            # Remove duplicate detections
-            filtered_results = remove_duplicates(results)
-            
-            # Extract text and confidence
-            text, confidence = extract_text_and_confidence(filtered_results)
-            
-            return {
-                "text": text,
-                "confidence": confidence,
-                "languages": languages,
-                "word_count": len(text.split()),
-                "details": [
-                    {
-                        "text": r[1],
-                        "confidence": r[2] if len(r) > 2 else 0,
-                        "box": r[0]
-                    } for r in filtered_results
-                ]
-            }
-            
-        except Exception as e:
-            logger.error(f"Error processing multilingual text: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
-    
-    @app.get("/ocr/health")
-    async def health_check():
-        """Check if OCR service is healthy."""
-        return {
-            "status": "ok",
-            "message": "OCR service is running",
-            "reader_initialized": reader is not None
-        }
-    
-    logger.info("OCR routes added to FastAPI app")
-
+# For running this file directly
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000) 

@@ -5,6 +5,8 @@ import { Toaster } from 'sonner';
 // Layout
 import MainLayout from '@/components/layouts/MainLayout';
 import DoctorLayout from '@/components/layouts/DoctorLayout';
+import PatientLayout from '@/components/layouts/PatientLayout';
+import PharmacistLayout from '@/components/layouts/PharmacistLayout';
 
 // Public Pages
 import LandingPage from '@/pages/LandingPage';
@@ -54,6 +56,18 @@ const DoctorLayoutWrapper = () => (
   </DoctorLayout>
 );
 
+const PatientLayoutWrapper = () => (
+  <PatientLayout>
+    <Outlet />
+  </PatientLayout>
+);
+
+const PharmacistLayoutWrapper = () => (
+  <PharmacistLayout>
+    <Outlet />
+  </PharmacistLayout>
+);
+
 const App: React.FC = () => {
   return (
     <BrowserRouter>
@@ -66,7 +80,7 @@ const App: React.FC = () => {
         </Route>
         
         {/* Patient routes */}
-        <Route element={<MainLayoutWrapper />}>
+        <Route element={<PatientLayoutWrapper />}>
           <Route path="/patient-dashboard">
             <Route index element={<PatientDashboard />} />
             <Route path="prescriptions" element={<PatientPrescriptions />} />
@@ -93,7 +107,7 @@ const App: React.FC = () => {
         </Route>
         
         {/* Pharmacist routes */}
-        <Route element={<MainLayoutWrapper />}>
+        <Route element={<PharmacistLayoutWrapper />}>
           <Route path="/pharmacist-dashboard">
             <Route index element={<PharmacistDashboard />} />
             <Route path="orders" element={<PharmacistOrders />} />

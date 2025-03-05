@@ -4,7 +4,6 @@ import { auth, db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import {
   Layout,
-  LayoutSidebar,
   LayoutContent,
 } from '@/components/ui/layout';
 import {
@@ -28,6 +27,7 @@ import {
   UserRound,
   MessageCircle
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface NavItem {
   name: string;
@@ -70,6 +70,7 @@ const PatientLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
   const location = useLocation();
+  const [userName, setUserName] = useState('Patient');
 
   const toggleGroup = (groupName: string) => {
     setExpandedGroups(prev =>
@@ -93,7 +94,9 @@ const PatientLayout: React.FC = () => {
       `}>
         {/* Logo */}
         <div className="flex h-16 items-center border-b px-6">
-          <span className="text-xl font-semibold">MediFlow</span>
+          <Link to="/patient-dashboard" className="text-xl font-semibold text-green-600">
+            MediFlow
+          </Link>
         </div>
 
         {/* Navigation */}
@@ -103,7 +106,11 @@ const PatientLayout: React.FC = () => {
               {!isNavGroup(item) ? (
                 <Link
                   to={item.href}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${
+                    isActiveRoute(item.href)
+                      ? 'bg-blue-50 text-blue-600 font-medium'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  }`}
                 >
                   <item.icon className="h-5 w-5" />
                   <span>{item.name}</span>
@@ -135,7 +142,11 @@ const PatientLayout: React.FC = () => {
                         <Link
                           key={subItem.href}
                           to={subItem.href}
-                          className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                          className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${
+                            isActiveRoute(subItem.href)
+                              ? 'bg-blue-50 text-blue-600 font-medium'
+                              : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
+                          }`}
                         >
                           <subItem.icon className="h-5 w-5" />
                           <span>{subItem.name}</span>
@@ -158,12 +169,36 @@ const PatientLayout: React.FC = () => {
         {/* Top Header */}
         <header className="sticky top-0 z-30 h-16 border-b bg-white">
           <div className="flex h-full items-center justify-between px-6">
-            <button
-              onClick={() => setCollapsed(!collapsed)}
-              className="rounded-lg p-2 hover:bg-gray-100"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setCollapsed(!collapsed)}
+                className="rounded-lg p-2 hover:bg-gray-100"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <button className="rounded-full p-2 hover:bg-gray-100">
+                <Bell className="h-5 w-5" />
+              </button>
+              <button className="rounded-full p-2 hover:bg-gray-100">
+                <Settings className="h-5 w-5" />
+              </button>
+              <div className="flex items-center gap-2">
+                <div className="rounded-full bg-blue-100 p-2">
+                  <UserRound className="h-5 w-5 text-blue-600" />
+                </div>
+                <span className="text-sm font-medium">{userName}</span>
+                <button
+                  onClick={() => auth.signOut()}
+                  className="text-gray-600 hover:text-red-600 transition-colors ml-2"
+                  title="Sign out"
+                >
+                  <LogOut className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
           </div>
         </header>
 

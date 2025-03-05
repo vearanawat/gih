@@ -23,12 +23,17 @@ app.add_middleware(
 from medical_imaging import add_medical_imaging_routes
 add_medical_imaging_routes(app)
 
+# Import and add OCR routes
+from ocr_service import add_ocr_routes
+add_ocr_routes(app)
+
 # Root endpoint
 @app.get("/")
 async def root():
     return {
         "status": "ok",
         "message": "MediFlow API is running",
+        "services": ["Medical Imaging", "OCR"],
         "docs_url": "/docs",
         "openapi_url": "/openapi.json"
     }
