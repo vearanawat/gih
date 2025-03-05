@@ -35,7 +35,7 @@ ct_model = None
 ct_processor = None
 disease_model = None
 
-def init_models(token=None):
+def init_models(token="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"):
     """Initialize models with Hugging Face token."""
     global xray_model, xray_processor, ct_model, ct_processor, disease_model
     

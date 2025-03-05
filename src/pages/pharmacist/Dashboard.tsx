@@ -585,7 +585,7 @@ const PharmacistDashboard: React.FC = () => {
             <Button
               onClick={() => handleStatusChange(prescription.id, 'rejected')}
               variant="outline"
-              className="text-red-600 hover:bg-red-50"
+              className="text-red-600 bg-white hover:bg-red-50"
             >
               Reject
             </Button>
@@ -596,7 +596,7 @@ const PharmacistDashboard: React.FC = () => {
           <h4 className="font-medium mb-2">Medicines</h4>
           <div className="space-y-2">
             {prescription.medicines.map((medicine, index) => (
-              <div key={index} className="p-3 bg-gray-50 rounded-md">
+              <div key={index} className="p-3 bg-gray-200 rounded-md">
                 <div className="flex justify-between items-start">
                   <div>
                     <p className="font-medium">{medicine.name} {medicine.dosage}</p>
@@ -609,7 +609,7 @@ const PharmacistDashboard: React.FC = () => {
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-medium">
-                      Price: ₹{getMedicinePrice(medicine.name).toFixed(2)}
+                      Price: ₹{getMedicinePrice(medicine.name)?getMedicinePrice(medicine.name).toFixed(2):"To be Decided"}
                     </p>
                   </div>
                 </div>
@@ -731,7 +731,7 @@ const PharmacistDashboard: React.FC = () => {
           {prescriptions.length > 0 ? (
             <div className="space-y-4">
               {prescriptions.map((prescription) => (
-                <div key={prescription.id} className="p-4 bg-gray-50 rounded-lg">
+                <div key={prescription.id} className="p-4 bg-gray-200 rounded-lg">
                   {renderPrescriptionDetails(prescription)}
                   </div>
               ))}
@@ -757,7 +757,7 @@ const PharmacistDashboard: React.FC = () => {
             onDragLeave={() => setIsDragging(false)}
           >
             <div className="text-center">
-              <div className="mx-auto w-12 h-12 bg-green-50 rounded-full flex items-center justify-center mb-3">
+              <div className="mx-auto w-12 h-12 bg-green-200 rounded-full flex items-center justify-center mb-3">
                 {isProcessing ? (
                   <Loader2 className="w-6 h-6 text-green-600 animate-spin" />
                 ) : (

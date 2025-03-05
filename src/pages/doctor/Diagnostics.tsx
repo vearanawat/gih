@@ -47,7 +47,7 @@ const Diagnostics = () => {
 
   const initializeModels = async () => {
     try {
-      const response = await axios.post('/medical/init-models');
+      const response = await axios.post('http://localhost:8000/medical/init-models');
       if (response.data.status === 'success') {
         setModelsInitialized(true);
         toast.success('Medical imaging models initialized');
@@ -90,7 +90,7 @@ const Diagnostics = () => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const endpoint = imageType === 'xray' ? '/medical/predict-xray' : '/medical/predict-ct';
+      const endpoint = imageType === 'xray' ? 'http://localhost:8000/medical/predict-xray' : 'http://localhost:8000/medical/predict-ct';
       const response = await axios.post(endpoint, formData);
 
       setImageResult(response.data);
@@ -114,7 +114,7 @@ const Diagnostics = () => {
       const formData = new FormData();
       formData.append('symptoms', symptoms);
 
-      const response = await axios.post('/medical/predict-disease', formData);
+      const response = await axios.post('http://localhost:8000/medical/predict-disease', formData);
       setDiseaseResult(response.data);
       toast.success('Symptom analysis complete!');
     } catch (error) {

@@ -27,7 +27,7 @@ app = FastAPI()
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://localhost:8080"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -370,6 +370,206 @@ def transcribe_audio_file(audio_file_path):
         )
 
 # Define a function to add OCR routes to a FastAPI app
+# def add_ocr_routes(app: FastAPI):
+#     @app.get("/ocr-status")
+#     async def ocr_status():
+#         return {"status": "healthy", "message": "OCR Service is running"}
+
+#     @app.post("/transcribe-audio")
+#     async def transcribe_audio(audio_file: UploadFile = File(...)):
+#         """
+#         Endpoint to transcribe audio file and extract information.
+#         """
+#         if not audio_file:
+#             raise HTTPException(
+#                 status_code=400,
+#                 detail="No audio file provided"
+#             )
+            
+#         if not audio_file.filename:
+#             raise HTTPException(
+#                 status_code=400,
+#                 detail="Invalid audio file"
+#             )
+            
+#         # Check file size (limit to 10MB)
+#         file_size = 0
+#         content = await audio_file.read()
+#         file_size = len(content)
+#         if file_size > 10 * 1024 * 1024:  # 10MB
+#             raise HTTPException(
+#                 status_code=400,
+#                 detail="Audio file too large. Maximum size is 10MB."
+#             )
+            
+#         wav_path = None
+#         temp_dir = None
+        
+#         try:
+#             # Convert audio to WAV format
+#             wav_path, temp_dir = convert_audio_to_wav(content)
+            
+#             # Initialize recognizer
+#             recognizer = sr.Recognizer()
+            
+#             # Read the audio file
+#             with sr.AudioFile(wav_path) as source:
+#                 # Adjust for ambient noise and set energy threshold
+#                 recognizer.adjust_for_ambient_noise(source, duration=0.5)
+#                 recognizer.energy_threshold = 300  # Adjust this value based on your needs
+                
+#                 # Record the audio data
+#                 audio_data = recognizer.record(source)
+                
+#                 try:
+#                     # Attempt to transcribe using Google Speech Recognition
+#                     text = recognizer.recognize_google(audio_data)
+                    
+#                     if not text:
+#                         raise HTTPException(
+#                             status_code=400,
+#                             detail="No speech detected in the audio"
+#                         )
+                    
+#                     # Extract information from transcribed text
+#                     patient_name, doctor_name = extract_names(text)
+#                     date = extract_date(text)
+#                     medicines = extract_medicines(text)
+                    
+#                     return JSONResponse(content={
+#                         "success": True,
+#                         "transcribed_text": text,
+#                         "structured_data": {
+#                             "patient_name": patient_name or "Not found",
+#                             "doctor_name": doctor_name or "Not found",
+#                             "date": date or "Not found",
+#                             "medicines": medicines or []
+#                         }
+#                     })
+                    
+#                 except sr.RequestError as e:
+#                     # Try using offline recognition as fallback
+#                     try:
+#                         text = recognizer.recognize_sphinx(audio_data)
+#                         if text:
+#                             return JSONResponse(content={
+#                                 "success": True,
+#                                 "transcribed_text": text,
+#                                 "note": "Used offline recognition (lower accuracy)",
+#                                 "structured_data": {
+#                                     "patient_name": "Not found",
+#                                     "doctor_name": "Not found",
+#                                     "date": "Not found",
+#                                     "medicines": []
+#                                 }
+#                             })
+#                     except:
+#                         raise HTTPException(
+#                             status_code=503,
+#                             detail="Speech recognition services unavailable. Please try again later."
+#                         )
+#                 except sr.UnknownValueError:
+#                     raise HTTPException(
+#                         status_code=400,
+#                         detail="Could not understand the audio. Please speak clearly and try again."
+#                     )
+#                 except Exception as e:
+#                     logger.error(f"Error during transcription: {str(e)}")
+#                     raise HTTPException(
+#                         status_code=500,
+#                         detail="Error processing audio. Please try again."
+#                     )
+                
+#         except HTTPException:
+#             raise
+#         except Exception as e:
+#             logger.error(f"Unexpected error: {str(e)}")
+#             raise HTTPException(
+#                 status_code=500,
+#                 detail="An unexpected error occurred. Please try again."
+#             )
+#         finally:
+#             # Clean up temporary files
+#             cleanup_files(None, wav_path, temp_dir)
+    
+# @app.post("/process-prescription")
+# async def process_prescription(file: UploadFile = File(...)):
+#     try:
+#         # Initialize OCR if not already done
+#         ocr_instance = get_ocr()
+        
+#         # Read image file
+#         contents = await file.read()
+#         image = Image.open(io.BytesIO(contents))
+        
+#         # Convert PIL Image to numpy array
+#         img_array = np.array(image)
+        
+#         # Perform OCR
+#         result = ocr_instance.ocr(img_array, cls=True)
+        
+#         if not result or len(result) == 0:
+#             return {
+#                 "results": [],
+#                 "message": "No text detected in image"
+#             }
+        
+#         # Extract text and confidence scores
+#         extracted_data = extract_text_and_confidence(result)
+        
+#         # Combine all text for processing
+#         full_text = extracted_data["full_text"]
+        
+#         # Extract structured information
+#         patient_name, doctor_name = extract_names(full_text)
+#         date = extract_date(full_text)
+#         medicines = extract_medicines(full_text)
+        
+#         # Calculate average confidence
+#         confidences = [item["confidence"] for item in extracted_data["extracted_data"]]
+#         avg_confidence = sum(confidences) / len(confidences) if confidences else 0
+        
+#         # Generate annotated image
+#         boxes = [item["box"] for item in extracted_data["extracted_data"]]
+#         texts = [item["text"] for item in extracted_data["extracted_data"]]
+#         scores = [item["confidence"] for item in extracted_data["extracted_data"]]
+        
+#         try:
+#             font = ImageFont.load_default()
+#             annotated_image = draw_ocr(image, boxes, texts, scores)
+#             annotated_image = Image.fromarray(annotated_image)
+            
+#             # Save annotated image to bytes
+#             img_byte_arr = io.BytesIO()
+#             annotated_image.save(img_byte_arr, format='PNG')
+#             annotated_image_bytes = img_byte_arr.getvalue()
+            
+#         except Exception as e:
+#             print(f"Error generating annotated image: {str(e)}")
+#             annotated_image_bytes = None
+        
+#         return {
+#             "results": extracted_data["extracted_data"],
+#             "summary": extracted_data["summary"],
+#             "structured_data": {
+#                 "patient_name": patient_name,
+#                 "doctor_name": doctor_name,
+#                 "date": date,
+#                 "medicines": medicines,
+#                 "confidence": avg_confidence,
+#                 "raw_text": full_text
+#             }
+#         }
+#     except Exception as e:
+#         print(f"Error processing image: {str(e)}")
+#         raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
+
+
+
+
+
+# In ocr_service.py
+
 def add_ocr_routes(app: FastAPI):
     @app.get("/ocr-status")
     async def ocr_status():
@@ -380,190 +580,91 @@ def add_ocr_routes(app: FastAPI):
         """
         Endpoint to transcribe audio file and extract information.
         """
-        if not audio_file:
-            raise HTTPException(
-                status_code=400,
-                detail="No audio file provided"
-            )
-            
-        if not audio_file.filename:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid audio file"
-            )
-            
-        # Check file size (limit to 10MB)
-        file_size = 0
-        content = await audio_file.read()
-        file_size = len(content)
-        if file_size > 10 * 1024 * 1024:  # 10MB
-            raise HTTPException(
-                status_code=400,
-                detail="Audio file too large. Maximum size is 10MB."
-            )
-            
-        wav_path = None
-        temp_dir = None
-        
-        try:
-            # Convert audio to WAV format
-            wav_path, temp_dir = convert_audio_to_wav(content)
-            
-            # Initialize recognizer
-            recognizer = sr.Recognizer()
-            
-            # Read the audio file
-            with sr.AudioFile(wav_path) as source:
-                # Adjust for ambient noise and set energy threshold
-                recognizer.adjust_for_ambient_noise(source, duration=0.5)
-                recognizer.energy_threshold = 300  # Adjust this value based on your needs
-                
-                # Record the audio data
-                audio_data = recognizer.record(source)
-                
-                try:
-                    # Attempt to transcribe using Google Speech Recognition
-                    text = recognizer.recognize_google(audio_data)
-                    
-                    if not text:
-                        raise HTTPException(
-                            status_code=400,
-                            detail="No speech detected in the audio"
-                        )
-                    
-                    # Extract information from transcribed text
-                    patient_name, doctor_name = extract_names(text)
-                    date = extract_date(text)
-                    medicines = extract_medicines(text)
-                    
-                    return JSONResponse(content={
-                        "success": True,
-                        "transcribed_text": text,
-                        "structured_data": {
-                            "patient_name": patient_name or "Not found",
-                            "doctor_name": doctor_name or "Not found",
-                            "date": date or "Not found",
-                            "medicines": medicines or []
-                        }
-                    })
-                    
-                except sr.RequestError as e:
-                    # Try using offline recognition as fallback
-                    try:
-                        text = recognizer.recognize_sphinx(audio_data)
-                        if text:
-                            return JSONResponse(content={
-                                "success": True,
-                                "transcribed_text": text,
-                                "note": "Used offline recognition (lower accuracy)",
-                                "structured_data": {
-                                    "patient_name": "Not found",
-                                    "doctor_name": "Not found",
-                                    "date": "Not found",
-                                    "medicines": []
-                                }
-                            })
-                    except:
-                        raise HTTPException(
-                            status_code=503,
-                            detail="Speech recognition services unavailable. Please try again later."
-                        )
-                except sr.UnknownValueError:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Could not understand the audio. Please speak clearly and try again."
-                    )
-                except Exception as e:
-                    logger.error(f"Error during transcription: {str(e)}")
-                    raise HTTPException(
-                        status_code=500,
-                        detail="Error processing audio. Please try again."
-                    )
-                
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail="An unexpected error occurred. Please try again."
-            )
-        finally:
-            # Clean up temporary files
-            cleanup_files(None, wav_path, temp_dir)
+        # Existing implementation...
     
-@app.post("/process-prescription")
-async def process_prescription(file: UploadFile = File(...)):
-    try:
-        # Initialize OCR if not already done
-        ocr_instance = get_ocr()
-        
-        # Read image file
-        contents = await file.read()
-        image = Image.open(io.BytesIO(contents))
-        
-        # Convert PIL Image to numpy array
-        img_array = np.array(image)
-        
-        # Perform OCR
-        result = ocr_instance.ocr(img_array, cls=True)
-        
-        if not result or len(result) == 0:
-            return {
-                "results": [],
-                "message": "No text detected in image"
-            }
-        
-        # Extract text and confidence scores
-        extracted_data = extract_text_and_confidence(result)
-        
-        # Combine all text for processing
-        full_text = extracted_data["full_text"]
-        
-        # Extract structured information
-        patient_name, doctor_name = extract_names(full_text)
-        date = extract_date(full_text)
-        medicines = extract_medicines(full_text)
-        
-        # Calculate average confidence
-        confidences = [item["confidence"] for item in extracted_data["extracted_data"]]
-        avg_confidence = sum(confidences) / len(confidences) if confidences else 0
-        
-        # Generate annotated image
-        boxes = [item["box"] for item in extracted_data["extracted_data"]]
-        texts = [item["text"] for item in extracted_data["extracted_data"]]
-        scores = [item["confidence"] for item in extracted_data["extracted_data"]]
-        
+    @app.post("/process-prescription")
+    async def process_prescription(file: UploadFile = File(...)):
         try:
-            font = ImageFont.load_default()
-            annotated_image = draw_ocr(image, boxes, texts, scores)
-            annotated_image = Image.fromarray(annotated_image)
+            # Initialize OCR if not already done
+            ocr_instance = get_ocr()
+            print(f"Received file: {file.filename}, content type: {file.content_type}")
             
-            # Save annotated image to bytes
-            img_byte_arr = io.BytesIO()
-            annotated_image.save(img_byte_arr, format='PNG')
-            annotated_image_bytes = img_byte_arr.getvalue()
+            # Read image file
+            contents = await file.read()
+            image = Image.open(io.BytesIO(contents))
+            print(f"Image size: {image}")
+            if image.mode == 'RGBA':
+            # Create a white background image
+                background = Image.new('RGB', image.size, (255, 255, 255))
+            # Paste the image on the background using alpha channel as mask
+                background.paste(image, mask=image.split()[3])  # 3 is the alpha channel
+                image = background
             
-        except Exception as e:
-            print(f"Error generating annotated image: {str(e)}")
-            annotated_image_bytes = None
-        
-        return {
-            "results": extracted_data["extracted_data"],
-            "summary": extracted_data["summary"],
-            "structured_data": {
-                "patient_name": patient_name,
-                "doctor_name": doctor_name,
-                "date": date,
-                "medicines": medicines,
-                "confidence": avg_confidence,
-                "raw_text": full_text
+            elif image.mode != 'RGB':
+            # Convert any other mode to RGB
+                image = image.convert('RGB')
+            
+            # Convert PIL Image to numpy array
+            img_array = np.array(image)
+            
+            # Perform OCR
+            result = ocr_instance.ocr(img_array, cls=True)
+            
+            if not result or len(result) == 0:
+                return {
+                    "results": [],
+                    "message": "No text detected in image"
+                }
+            
+            # Extract text and confidence scores
+            extracted_data = extract_text_and_confidence(result)
+            
+            # Combine all text for processing
+            full_text = extracted_data["full_text"]
+            
+            # Extract structured information
+            patient_name, doctor_name = extract_names(full_text)
+            date = extract_date(full_text)
+            medicines = extract_medicines(full_text)
+            
+            # Calculate average confidence
+            confidences = [item["confidence"] for item in extracted_data["extracted_data"]]
+            avg_confidence = sum(confidences) / len(confidences) if confidences else 0
+            
+            # Generate annotated image
+            boxes = [item["box"] for item in extracted_data["extracted_data"]]
+            texts = [item["text"] for item in extracted_data["extracted_data"]]
+            scores = [item["confidence"] for item in extracted_data["extracted_data"]]
+            
+            try:
+                font = ImageFont.load_default()
+                annotated_image = draw_ocr(image, boxes, texts, scores)
+                annotated_image = Image.fromarray(annotated_image)
+                
+                # Save annotated image to bytes
+                img_byte_arr = io.BytesIO()
+                annotated_image.save(img_byte_arr, format='PNG')
+                annotated_image_bytes = img_byte_arr.getvalue()
+                
+            except Exception as e:
+                print(f"Error generating annotated image: {str(e)}")
+                annotated_image_bytes = None
+            
+            return {
+                "results": extracted_data["extracted_data"],
+                "summary": extracted_data["summary"],
+                "structured_data": {
+                    "patient_name": patient_name,
+                    "doctor_name": doctor_name,
+                    "date": date,
+                    "medicines": medicines,
+                    "confidence": avg_confidence,
+                    "raw_text": full_text
+                }
             }
-        }
-    except Exception as e:
-        print(f"Error processing image: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
-
+        except Exception as e:
+            print(f"Error processing image: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
 # Add routes to the standalone app
 add_ocr_routes(app)
 
