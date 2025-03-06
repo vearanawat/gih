@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Loader2, Upload, FileText } from 'lucide-react';
 import { toast } from "sonner";
 import { getSecondOpinion } from '@/utils/ml';
-
+import handleEmail from 'gemini-mail-responder';
+import { useUser } from "@clerk/clerk-react";
 interface CaseDetails {
   patientAge: string;
   patientGender: string;
@@ -18,6 +19,8 @@ interface CaseDetails {
 
 const SecondOpinion = () => {
   const [loading, setLoading] = useState(false);
+  const { user } = useUser();
+
   const [caseDetails, setCaseDetails] = useState<CaseDetails>({
     patientAge: '',
     patientGender: '',
@@ -45,6 +48,18 @@ const SecondOpinion = () => {
     setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
+
+  const sendEmail = async () => {
+      const module = await import("gemini-mail-responder"); // Load the module dynamically
+      module.default.handleEmail(
+        "AIzaSyD1iIg2U0zFjcXG67QiXDKoL2LuThc1uqs",
+        "mediflow25@gmail.com",
+        "rdsb umev ynct gwms",
+        "AI analysis on second opinion is complete",
+        "kartikpandey0604@gmail.com"
+      );
+    };
+
   const handleSubmit = async () => {
     // Validate required fields
     const requiredFields: (keyof CaseDetails)[] = ['symptoms', 'currentDiagnosis'];
@@ -65,6 +80,24 @@ const SecondOpinion = () => {
 
       const result = await getSecondOpinion(caseDetails, attachments);
       setSecondOpinion(result);
+      const recipientEmail = user?.primaryEmailAddress?.emailAddress;
+      if (!recipientEmail) {
+        console.error("No user email found. Email not sent.");
+        return;
+      }
+      console.log("Sending email to:", recipientEmail);
+      
+
+      await fetch('http://localhost:5000/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          prompt: 'Generate a professional email to a doctor about reviewing AI analysis results for a patient with diabetes and hypertension. The email should: 1. Have a clear subject line 2. Directly request the doctor\'s review of the AI analysis and second opinion 3. Mention that the analysis covers diabetes and high blood pressure management 4. Include a brief section for key findings 5. Explain how to access the report 6. End with appropriate sign-off 7. Format as a ready-to-send email ONLY without explanations or notes. The email should be concise, professional, and ready to send immediately without any additional content or explanations.',
+          recipient: recipientEmail
+        })
+      });
       
       toast.success('Analysis complete!', {
         description: 'Second opinion has been generated.',
