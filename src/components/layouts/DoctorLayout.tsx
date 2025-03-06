@@ -33,6 +33,8 @@ const navigation = [
   { name: 'History', href: '/doctor-dashboard/history', icon: History },
   { name: 'Disease Insights', href: '/doctor-dashboard/insights', icon: Brain },
   { name: 'Second Opinion', href: '/doctor-dashboard/second-opinion', icon: FileSearch },
+  { name: 'Community', href: '/doctor-dashboard/community', icon: Users },
+
 ];
 
 const DoctorLayout = () => {

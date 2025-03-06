@@ -32,6 +32,7 @@ const DoctorDashboard = () => {
     { name: 'History', href: '/doctor-dashboard/history', icon: History },
     { name: 'Disease Insights', href: '/doctor-dashboard/insights', icon: Brain },
     { name: 'Second Opinion', href: '/doctor-dashboard/second-opinion', icon: FileSearch },
+    // { name: 'Community Forum', href: '/doctor-dashboard/community', icon: Users },
   ];
 
   return (
@@ -130,4 +131,4 @@ const DoctorDashboard = () => {
   );
 };
 
-export default DoctorDashboard; 
+export default DoctorDashboard;

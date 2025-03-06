@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Bot, User, Loader2, Image as ImageIcon, Mic, X, Globe, Volume2 } from "lucide-react";
+import { Send, Bot, User, Loader2, Image as ImageIcon, Mic, X, Globe } from "lucide-react";
 import { generateAIResponse } from "@/utils/ai";
 import { toast } from "sonner";
 
@@ -14,14 +14,7 @@ interface Message {
 
 const LANGUAGES = [
   { code: "en-US", name: "English" },
-  { code: "es-ES", name: "Español (Spanish)" },
-  { code: "fr-FR", name: "Français (French)" },
-  { code: "de-DE", name: "Deutsch (German)" },
-  { code: "it-IT", name: "Italiano (Italian)" },
   { code: "hi-IN", name: "हिन्दी (Hindi)" },
-  { code: "zh-CN", name: "中文 (Chinese)" },
-  { code: "ja-JP", name: "日本語 (Japanese)" },
-  { code: "ar-SA", name: "العربية (Arabic)" },
 ];
 
 const AIAssistant = () => {
@@ -36,7 +29,7 @@ const AIAssistant = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const synth = window.speechSynthesis; // Speech Synthesis API
+  const synth = window.speechSynthesis;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -75,15 +68,21 @@ const AIAssistant = () => {
     }
   };
 
-  // Speak function (now properly working)
   const speak = (text: string) => {
+    if (!synth) {
+      console.error("Speech synthesis not supported.");
+      toast.error("Speech synthesis not supported.");
+      return;
+    }
+
     if (synth.speaking) {
-      synth.cancel(); // Stop any previous speech to avoid overlapping
+      synth.cancel();
     }
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = selectedLang;
-    utterance.rate = 1; // Normal speed
+    utterance.rate = 1;
+    utterance.volume = 1;
 
     utterance.onerror = (event) => {
       console.error("Speech Synthesis Error:", event);
@@ -108,13 +107,18 @@ const AIAssistant = () => {
       const response = await generateAIResponse(input, selectedImage);
       setMessages((prev) => [...prev, { role: "assistant", content: response }]);
 
-      // Speak AI response after it is fully set
-      setTimeout(() => speak(response), 500); // Small delay to ensure it's set first
+      speak(response);
     } catch (error) {
       console.error("Error getting AI response:", error);
       toast.error("Failed to get response from AI assistant");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files?.[0]) {
+      setSelectedImage(event.target.files[0]);
     }
   };
 
@@ -126,7 +130,6 @@ const AIAssistant = () => {
       </div>
 
       <Card className="flex flex-col h-[calc(100vh-12rem)]">
-        {/* Language Selection */}
         <div className="p-4 border-b flex items-center gap-2">
           <Globe className="w-5 h-5 text-gray-500" />
           <select
@@ -142,7 +145,6 @@ const AIAssistant = () => {
           </select>
         </div>
 
-        {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.map((message, index) => (
             <div key={index} className={`flex ${message.role === "assistant" ? "justify-start" : "justify-end"}`}>
@@ -160,12 +162,15 @@ const AIAssistant = () => {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Area */}
         <div className="p-4 border-t flex gap-2">
           <Button variant="outline" size="icon" onClick={handleVoiceInput} disabled={isLoading}>
             <Mic className={`w-5 h-5 ${isListening ? "text-red-500 animate-pulse" : ""}`} />
           </Button>
           <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Type or speak your message..." disabled={isLoading} className="flex-1" />
+          <Button variant="outline" size="icon" onClick={() => fileInputRef.current?.click()} disabled={isLoading}>
+            <ImageIcon className="w-5 h-5" />
+          </Button>
+          <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" ref={fileInputRef} />
           <Button onClick={handleSend} disabled={(!input.trim() && !selectedImage) || isLoading}>
             {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           </Button>

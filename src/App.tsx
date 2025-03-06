@@ -30,7 +30,8 @@ import SymptomAnalysis from '@/pages/doctor/SymptomAnalysis';
 import DoctorHistory from '@/pages/doctor/History';
 import DiseaseInsights from '@/pages/doctor/Insights';
 import SecondOpinion from '@/pages/doctor/SecondOpinion';
-import Diagnostics from '@/pages/doctor/Diagnostics';
+// import Diagnostics from '@/pages/doctor/Diagnostics';
+import Community from '@/pages/doctor/Community';
 
 // Pharmacist Pages
 import PharmacistDashboard from '@/pages/pharmacist/Dashboard';
@@ -102,6 +103,7 @@ const App: React.FC = () => {
             <Route path="history" element={<DoctorHistory />} />
             <Route path="insights" element={<DiseaseInsights />} />
             <Route path="second-opinion" element={<SecondOpinion />} />
+            <Route path="community" element={<Community />} />
           </Route>
         </Route>
         
