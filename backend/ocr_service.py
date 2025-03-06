@@ -1,5 +1,4 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from paddleocr import PaddleOCR, draw_ocr
 import cv2
 import numpy as np
@@ -9,47 +8,30 @@ import re
 from datetime import datetime
 import os
 from groq import Groq
-from dotenv import load_dotenv
-from fastapi.responses import JSONResponse
-import easyocr
 import logging
 from typing import List, Dict, Any
 import speech_recognition as sr
 from pydub import AudioSegment
 import tempfile
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Create a standalone FastAPI app for direct usage
-app = FastAPI()
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Set environment variable to avoid library conflicts
-os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
-
-# Initialize Groq client with API key
-groq_api_key = os.getenv('GROQ_API_KEY')
-if not groq_api_key:
-    raise ValueError("GROQ_API_KEY environment variable is not set")
-
-# Initialize Groq client
-groq_client = Groq(api_key=groq_api_key)
-
-# Initialize OCR
-ocr = None
+import shutil
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Initialize OCR
+ocr = None
+
+# Initialize Groq client (assuming it's configured elsewhere)
+groq_client = None
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    groq_api_key = os.getenv('GROQ_API_KEY')
+    if groq_api_key:
+        groq_client = Groq(api_key=groq_api_key)
+except Exception as e:
+    logger.error(f"Failed to initialize Groq client: {e}")
 
 def get_ocr():
     global ocr
@@ -62,17 +44,7 @@ def get_ocr():
         )
     return ocr
 
-def extract_score(value):
-    """Extracts the first float number from a string or tuple."""
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        match = re.search(r"\d+(\.\d+)?", value)
-        return float(match.group()) if match else 0.0
-    if isinstance(value, tuple):
-        return extract_score(value[0])
-    return 0.0
-
+# Text extraction helper functions
 def extract_text_and_confidence(result):
     """Extract text and confidence scores from OCR result."""
     extracted_data = []
@@ -95,7 +67,7 @@ def extract_text_and_confidence(result):
     
     # Get summary using Groq if text is available
     summary = ""
-    if combined_text.strip():
+    if combined_text.strip() and groq_client:
         try:
             chat_completion = groq_client.chat.completions.create(
                 messages=[{
@@ -106,7 +78,7 @@ def extract_text_and_confidence(result):
             )
             summary = chat_completion.choices[0].message.content
         except Exception as e:
-            print(f"Error getting summary: {e}")
+            logger.error(f"Error getting summary: {e}")
             summary = "Error generating summary"
     
     return {
@@ -179,15 +151,6 @@ def extract_names(text):
                 if len(parts) > 1:
                     patient_name = parts[1].strip()
     
-    # If we still don't have names, try to extract any capitalized words that might be names
-    if not doctor_name and not patient_name:
-        # Look for capitalized words that might be names
-        name_candidates = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\b', text)
-        if len(name_candidates) >= 2:
-            # Assume first is patient, second is doctor (or vice versa)
-            patient_name = name_candidates[0]
-            doctor_name = name_candidates[1]
-            
     return patient_name, doctor_name
 
 def extract_medicines(text):
@@ -218,7 +181,7 @@ def extract_medicines(text):
     
     return medicines
 
-def convert_audio_to_wav(audio_bytes):
+async def convert_audio_to_wav(audio_bytes):
     """Convert audio bytes to WAV format using pydub."""
     temp_dir = None
     temp_input_path = None
@@ -227,85 +190,82 @@ def convert_audio_to_wav(audio_bytes):
     try:
         # Create a temporary directory for our files
         temp_dir = tempfile.mkdtemp()
-        temp_input_path = os.path.join(temp_dir, 'input.webm')  # Explicitly use .webm extension
+        temp_input_path = os.path.join(temp_dir, 'input.webm')
         temp_output_path = os.path.join(temp_dir, 'output.wav')
         
         # Write the audio bytes to a temporary file
         with open(temp_input_path, 'wb') as f:
             f.write(audio_bytes)
         
-        try:
-            # Try to load as WebM first
+        # Define formats to try
+        formats_to_try = ['webm', 'wav', None]  # None means try as generic format
+        
+        audio = None
+        last_error = None
+        
+        # Try different formats until one works
+        for format_name in formats_to_try:
+            format_str = format_name if format_name else "generic format"
             try:
-                logger.info("Attempting to convert WebM audio...")
-                audio = AudioSegment.from_file(temp_input_path, format='webm')
-                logger.info("Successfully loaded WebM audio")
-            except Exception as webm_error:
-                logger.error(f"WebM conversion failed: {str(webm_error)}")
-                # Try as WAV
-                try:
-                    logger.info("Attempting to convert as WAV...")
+                logger.info(f"Attempting to convert audio as {format_str}...")
+                
+                if format_name == 'wav':
                     audio = AudioSegment.from_wav(temp_input_path)
-                    logger.info("Successfully loaded WAV audio")
-                except Exception as wav_error:
-                    logger.error(f"WAV conversion failed: {str(wav_error)}")
-                    # Try as generic format
-                    try:
-                        logger.info("Attempting to convert as generic format...")
-                        audio = AudioSegment.from_file(temp_input_path)
-                        logger.info("Successfully loaded audio in generic format")
-                    except Exception as generic_error:
-                        logger.error(f"Generic format conversion failed: {str(generic_error)}")
-                        raise HTTPException(
-                            status_code=400,
-                            detail="Could not convert audio file. Please try recording again."
-                        )
-
-            # Process the audio
-            logger.info("Processing audio...")
-            audio = audio.set_channels(1)  # Convert to mono
-            audio = audio.set_frame_rate(16000)  # Set sample rate to 16kHz
-            
-            # Export as WAV
-            logger.info("Exporting to WAV format...")
-            audio.export(temp_output_path, format='wav')
-            logger.info("Successfully exported to WAV")
-            
-            # Verify the output file
-            if not os.path.exists(temp_output_path):
-                raise HTTPException(
-                    status_code=500,
-                    detail="Failed to create output file"
-                )
-            
-            if os.path.getsize(temp_output_path) == 0:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Output file is empty"
-                )
-            
-            logger.info("Audio conversion completed successfully")
-            return temp_output_path, temp_dir
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Error during audio conversion: {str(e)}")
-            cleanup_files(temp_input_path, temp_output_path, temp_dir)
+                elif format_name:
+                    audio = AudioSegment.from_file(temp_input_path, format=format_name)
+                else:
+                    audio = AudioSegment.from_file(temp_input_path)
+                    
+                logger.info(f"Successfully loaded audio as {format_str}")
+                break  # Exit loop if successful
+                
+            except Exception as e:
+                last_error = e
+                logger.error(f"{format_str.capitalize()} conversion failed: {str(e)}")
+        
+        # If all attempts failed
+        if audio is None:
             raise HTTPException(
                 status_code=400,
-                detail="Failed to process audio file. Please try recording again."
+                detail=f"Could not convert audio file: {str(last_error)}. Please try recording again."
             )
+
+        # Process the audio
+        logger.info("Processing audio...")
+        audio = audio.set_channels(1)  # Convert to mono
+        audio = audio.set_frame_rate(16000)  # Set sample rate to 16kHz
+        
+        # Export as WAV
+        logger.info("Exporting to WAV format...")
+        audio.export(temp_output_path, format='wav')
+        logger.info("Successfully exported to WAV")
+        
+        # Verify the output file
+        if not os.path.exists(temp_output_path) or os.path.getsize(temp_output_path) == 0:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to create valid output file"
+            )
+        
+        logger.info("Audio conversion completed successfully")
+        return temp_output_path, temp_dir
             
+    except HTTPException:
+        # Cleanup before re-raising
+        if temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        raise
+        
     except Exception as e:
         logger.error(f"Error in audio handling: {str(e)}")
-        cleanup_files(temp_input_path, temp_output_path, temp_dir)
+        if temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
         raise HTTPException(
             status_code=500,
-            detail="Failed to process audio file. Please try again."
+            detail=f"Failed to process audio file: {str(e)}. Please try again."
         )
 
-def cleanup_files(input_path: str = None, output_path: str = None, dir_path: str = None):
+def cleanup_files(input_path=None, output_path=None, dir_path=None):
     """Helper function to clean up temporary files."""
     try:
         # Close any open file handles
@@ -369,207 +329,6 @@ def transcribe_audio_file(audio_file_path):
             detail="Failed to process audio file. Please try again."
         )
 
-# Define a function to add OCR routes to a FastAPI app
-# def add_ocr_routes(app: FastAPI):
-#     @app.get("/ocr-status")
-#     async def ocr_status():
-#         return {"status": "healthy", "message": "OCR Service is running"}
-
-#     @app.post("/transcribe-audio")
-#     async def transcribe_audio(audio_file: UploadFile = File(...)):
-#         """
-#         Endpoint to transcribe audio file and extract information.
-#         """
-#         if not audio_file:
-#             raise HTTPException(
-#                 status_code=400,
-#                 detail="No audio file provided"
-#             )
-            
-#         if not audio_file.filename:
-#             raise HTTPException(
-#                 status_code=400,
-#                 detail="Invalid audio file"
-#             )
-            
-#         # Check file size (limit to 10MB)
-#         file_size = 0
-#         content = await audio_file.read()
-#         file_size = len(content)
-#         if file_size > 10 * 1024 * 1024:  # 10MB
-#             raise HTTPException(
-#                 status_code=400,
-#                 detail="Audio file too large. Maximum size is 10MB."
-#             )
-            
-#         wav_path = None
-#         temp_dir = None
-        
-#         try:
-#             # Convert audio to WAV format
-#             wav_path, temp_dir = convert_audio_to_wav(content)
-            
-#             # Initialize recognizer
-#             recognizer = sr.Recognizer()
-            
-#             # Read the audio file
-#             with sr.AudioFile(wav_path) as source:
-#                 # Adjust for ambient noise and set energy threshold
-#                 recognizer.adjust_for_ambient_noise(source, duration=0.5)
-#                 recognizer.energy_threshold = 300  # Adjust this value based on your needs
-                
-#                 # Record the audio data
-#                 audio_data = recognizer.record(source)
-                
-#                 try:
-#                     # Attempt to transcribe using Google Speech Recognition
-#                     text = recognizer.recognize_google(audio_data)
-                    
-#                     if not text:
-#                         raise HTTPException(
-#                             status_code=400,
-#                             detail="No speech detected in the audio"
-#                         )
-                    
-#                     # Extract information from transcribed text
-#                     patient_name, doctor_name = extract_names(text)
-#                     date = extract_date(text)
-#                     medicines = extract_medicines(text)
-                    
-#                     return JSONResponse(content={
-#                         "success": True,
-#                         "transcribed_text": text,
-#                         "structured_data": {
-#                             "patient_name": patient_name or "Not found",
-#                             "doctor_name": doctor_name or "Not found",
-#                             "date": date or "Not found",
-#                             "medicines": medicines or []
-#                         }
-#                     })
-                    
-#                 except sr.RequestError as e:
-#                     # Try using offline recognition as fallback
-#                     try:
-#                         text = recognizer.recognize_sphinx(audio_data)
-#                         if text:
-#                             return JSONResponse(content={
-#                                 "success": True,
-#                                 "transcribed_text": text,
-#                                 "note": "Used offline recognition (lower accuracy)",
-#                                 "structured_data": {
-#                                     "patient_name": "Not found",
-#                                     "doctor_name": "Not found",
-#                                     "date": "Not found",
-#                                     "medicines": []
-#                                 }
-#                             })
-#                     except:
-#                         raise HTTPException(
-#                             status_code=503,
-#                             detail="Speech recognition services unavailable. Please try again later."
-#                         )
-#                 except sr.UnknownValueError:
-#                     raise HTTPException(
-#                         status_code=400,
-#                         detail="Could not understand the audio. Please speak clearly and try again."
-#                     )
-#                 except Exception as e:
-#                     logger.error(f"Error during transcription: {str(e)}")
-#                     raise HTTPException(
-#                         status_code=500,
-#                         detail="Error processing audio. Please try again."
-#                     )
-                
-#         except HTTPException:
-#             raise
-#         except Exception as e:
-#             logger.error(f"Unexpected error: {str(e)}")
-#             raise HTTPException(
-#                 status_code=500,
-#                 detail="An unexpected error occurred. Please try again."
-#             )
-#         finally:
-#             # Clean up temporary files
-#             cleanup_files(None, wav_path, temp_dir)
-    
-# @app.post("/process-prescription")
-# async def process_prescription(file: UploadFile = File(...)):
-#     try:
-#         # Initialize OCR if not already done
-#         ocr_instance = get_ocr()
-        
-#         # Read image file
-#         contents = await file.read()
-#         image = Image.open(io.BytesIO(contents))
-        
-#         # Convert PIL Image to numpy array
-#         img_array = np.array(image)
-        
-#         # Perform OCR
-#         result = ocr_instance.ocr(img_array, cls=True)
-        
-#         if not result or len(result) == 0:
-#             return {
-#                 "results": [],
-#                 "message": "No text detected in image"
-#             }
-        
-#         # Extract text and confidence scores
-#         extracted_data = extract_text_and_confidence(result)
-        
-#         # Combine all text for processing
-#         full_text = extracted_data["full_text"]
-        
-#         # Extract structured information
-#         patient_name, doctor_name = extract_names(full_text)
-#         date = extract_date(full_text)
-#         medicines = extract_medicines(full_text)
-        
-#         # Calculate average confidence
-#         confidences = [item["confidence"] for item in extracted_data["extracted_data"]]
-#         avg_confidence = sum(confidences) / len(confidences) if confidences else 0
-        
-#         # Generate annotated image
-#         boxes = [item["box"] for item in extracted_data["extracted_data"]]
-#         texts = [item["text"] for item in extracted_data["extracted_data"]]
-#         scores = [item["confidence"] for item in extracted_data["extracted_data"]]
-        
-#         try:
-#             font = ImageFont.load_default()
-#             annotated_image = draw_ocr(image, boxes, texts, scores)
-#             annotated_image = Image.fromarray(annotated_image)
-            
-#             # Save annotated image to bytes
-#             img_byte_arr = io.BytesIO()
-#             annotated_image.save(img_byte_arr, format='PNG')
-#             annotated_image_bytes = img_byte_arr.getvalue()
-            
-#         except Exception as e:
-#             print(f"Error generating annotated image: {str(e)}")
-#             annotated_image_bytes = None
-        
-#         return {
-#             "results": extracted_data["extracted_data"],
-#             "summary": extracted_data["summary"],
-#             "structured_data": {
-#                 "patient_name": patient_name,
-#                 "doctor_name": doctor_name,
-#                 "date": date,
-#                 "medicines": medicines,
-#                 "confidence": avg_confidence,
-#                 "raw_text": full_text
-#             }
-#         }
-#     except Exception as e:
-#         print(f"Error processing image: {str(e)}")
-#         raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
-
-
-
-
-
-# In ocr_service.py
-
 def add_ocr_routes(app: FastAPI):
     @app.get("/ocr-status")
     async def ocr_status():
@@ -580,28 +339,69 @@ def add_ocr_routes(app: FastAPI):
         """
         Endpoint to transcribe audio file and extract information.
         """
-        # Existing implementation...
+        try:
+            # Create temporary directory for audio processing
+            audio_bytes = await audio_file.read()
+            temp_output_path, temp_dir = await convert_audio_to_wav(audio_bytes)
+            
+            try:
+                # Transcribe the audio file
+                transcribed_text = transcribe_audio_file(temp_output_path)
+                
+                # Extract information from transcribed text
+                patient_name, doctor_name = extract_names(transcribed_text)
+                date = extract_date(transcribed_text)
+                medicines = extract_medicines(transcribed_text)
+                
+                # Return structured response
+                return {
+                    "success": True,
+                    "transcribed_text": transcribed_text,
+                    "structured_data": {
+                        "patient_name": patient_name or "Not found",
+                        "doctor_name": doctor_name or "Not found",
+                        "date": date or "Not found",
+                        "medicines": medicines or [],
+                        "confidence": 0.95,
+                        "raw_text": transcribed_text
+                    }
+                }
+            finally:
+                # Clean up temporary files
+                cleanup_files(None, temp_output_path, temp_dir)
+                
+        except HTTPException as http_error:
+            return {
+                "success": False,
+                "error": http_error.detail
+            }
+        except Exception as e:
+            logger.error(f"Error in transcribe_audio: {str(e)}")
+            return {
+                "success": False,
+                "error": f"Failed to process audio file: {str(e)}. Please try again."
+            }
     
     @app.post("/process-prescription")
     async def process_prescription(file: UploadFile = File(...)):
         try:
             # Initialize OCR if not already done
             ocr_instance = get_ocr()
-            print(f"Received file: {file.filename}, content type: {file.content_type}")
+            logger.info(f"Received file: {file.filename}, content type: {file.content_type}")
             
             # Read image file
             contents = await file.read()
             image = Image.open(io.BytesIO(contents))
-            print(f"Image size: {image}")
+            
+            # Handle image format
             if image.mode == 'RGBA':
-            # Create a white background image
+                # Create a white background image
                 background = Image.new('RGB', image.size, (255, 255, 255))
-            # Paste the image on the background using alpha channel as mask
+                # Paste the image on the background using alpha channel as mask
                 background.paste(image, mask=image.split()[3])  # 3 is the alpha channel
                 image = background
-            
             elif image.mode != 'RGB':
-            # Convert any other mode to RGB
+                # Convert any other mode to RGB
                 image = image.convert('RGB')
             
             # Convert PIL Image to numpy array
@@ -631,25 +431,6 @@ def add_ocr_routes(app: FastAPI):
             confidences = [item["confidence"] for item in extracted_data["extracted_data"]]
             avg_confidence = sum(confidences) / len(confidences) if confidences else 0
             
-            # Generate annotated image
-            boxes = [item["box"] for item in extracted_data["extracted_data"]]
-            texts = [item["text"] for item in extracted_data["extracted_data"]]
-            scores = [item["confidence"] for item in extracted_data["extracted_data"]]
-            
-            try:
-                font = ImageFont.load_default()
-                annotated_image = draw_ocr(image, boxes, texts, scores)
-                annotated_image = Image.fromarray(annotated_image)
-                
-                # Save annotated image to bytes
-                img_byte_arr = io.BytesIO()
-                annotated_image.save(img_byte_arr, format='PNG')
-                annotated_image_bytes = img_byte_arr.getvalue()
-                
-            except Exception as e:
-                print(f"Error generating annotated image: {str(e)}")
-                annotated_image_bytes = None
-            
             return {
                 "results": extracted_data["extracted_data"],
                 "summary": extracted_data["summary"],
@@ -663,12 +444,8 @@ def add_ocr_routes(app: FastAPI):
                 }
             }
         except Exception as e:
-            print(f"Error processing image: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
-# Add routes to the standalone app
-add_ocr_routes(app)
-
-# For running this file directly
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+            logger.error(f"Error processing image: {str(e)}")
+            return {
+                "success": False,
+                "error": f"Error processing image: {str(e)}"
+            }

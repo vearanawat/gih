@@ -30,7 +30,6 @@ import { Button } from '../ui/button';
 const navigation = [
   { name: 'Image Analysis', href: '/doctor-dashboard', icon: Microscope },
   { name: 'Symptom Analysis', href: '/doctor-dashboard/symptoms', icon: Stethoscope },
-  { name: 'Diagnostics', href: '/doctor-dashboard/diagnostics', icon: LayoutDashboard },
   { name: 'History', href: '/doctor-dashboard/history', icon: History },
   { name: 'Disease Insights', href: '/doctor-dashboard/insights', icon: Brain },
   { name: 'Second Opinion', href: '/doctor-dashboard/second-opinion', icon: FileSearch },

@@ -83,7 +83,7 @@ const PharmacistInteractions = () => {
 
     if (relevantInteractions.length > 0) {
       setInteractions(prev => [...prev, ...relevantInteractions]);
-      toast.warning('Potential interactions detected', {
+      toast('Potential interactions detected', {
         description: 'Please review the interactions below.',
       });
     }

@@ -210,21 +210,21 @@ const PharmacistOrders = () => {
           
           <div className="grid grid-cols-2 gap-4">
             <Input
-              value={medicine.dosage}
+              value={medicine.dosage || ''}
               onChange={(e) => handleMedicineEdit(orderId, index, 'dosage', e.target.value)}
               placeholder="Dosage"
               className="text-sm"
             />
             <Input
               type="number"
-              value={medicine.quantity}
+              value={medicine.quantity || ''}
               onChange={(e) => handleMedicineEdit(orderId, index, 'quantity', parseInt(e.target.value))}
               placeholder="Quantity"
               className="text-sm"
             />
           </div>
           <Input
-            value={medicine.instructions}
+            value={medicine.instructions || ''}
             onChange={(e) => handleMedicineEdit(orderId, index, 'instructions', e.target.value)}
             placeholder="Instructions"
             className="text-sm"

@@ -99,7 +99,6 @@ const App: React.FC = () => {
           <Route path="/doctor-dashboard">
             <Route index element={<ImageAnalysis />} />
             <Route path="symptoms" element={<SymptomAnalysis />} />
-            <Route path="diagnostics" element={<Diagnostics />} />
             <Route path="history" element={<DoctorHistory />} />
             <Route path="insights" element={<DiseaseInsights />} />
             <Route path="second-opinion" element={<SecondOpinion />} />

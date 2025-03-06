@@ -255,12 +255,18 @@ export const analyzeDiagnosticImage = async (file: File): Promise<any> => {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await axios.post(`${API_BASE_URL}/analyze-diagnostic/`, formData, {
+    const response = await axios.post(`${API_BASE_URL}/medical/predict-xray`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 30000,
     });
 
-    return response.data;
+    // Transform the response to match the expected format
+    const result = response.data;
+    return {
+      diagnosis: result.prediction || 'Unknown',
+      confidence: 0.95,
+      details: result.top_predictions || []
+    }
   } catch (error) {
     console.error('Diagnostic analysis error:', error);
     throw new Error(error instanceof Error ? error.message : 'Failed to analyze diagnostic image');

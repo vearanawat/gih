@@ -675,40 +675,82 @@ const PharmacistDashboard: React.FC = () => {
       // Create form data
       const formData = new FormData();
       formData.append('audio_file', audioBlob, 'recording.webm');
-
+  
       // Send to backend
       const response = await fetch('http://localhost:8000/transcribe-audio', {
         method: 'POST',
         body: formData,
       });
-
+  
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to transcribe audio');
+        throw new Error(`Server error: ${response.status}`);
       }
 
-      const data = await response.json();
-      
-      if (!data.success) {
-        throw new Error('Transcription failed');
+      // Try to parse JSON response
+      let data;
+      try {
+        const text = await response.text();
+        if (!text) {
+          throw new Error('Empty response from server');
+        }
+        data = JSON.parse(text);
+      } catch (parseError) {
+        console.error('Failed to parse response:', parseError);
+        throw new Error('Invalid response format from server');
       }
       
-      // Process the transcribed data
+      // Log the data for debugging
+      console.log('Server response:', data);
+      
+      // Validate response structure
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid response structure from server');
+      }
+      
+      // Check for error messages in the response
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
+      // Check success status carefully
+      if (data.success === false) {
+        throw new Error(
+          typeof data.error === 'string' ? data.error : 'Transcription failed'
+        );
+      }
+      
+      // Ensure transcribed text exists
+      if (!data.transcribed_text) {
+        console.warn('Missing transcribed_text in response');
+        throw new Error('No transcription data in server response');
+      }
+      
+      // Process the transcribed data with fallbacks for missing properties
       handleProcessedData({
         results: [],
-        summary: data.transcribed_text,
-        structured_data: data.structured_data
+        summary: data.transcribed_text || 'No transcription available',
+        structured_data: data.structured_data || {}
       });
-
+  
       toast.success('Audio transcribed successfully');
       
     } catch (error: any) {
       console.error('Error transcribing audio:', error);
-      toast.error(
-        error.message && typeof error.message === 'string' 
-          ? error.message 
-          : 'Failed to transcribe audio. Please try again.'
-      );
+      
+      // Check for specific FFmpeg-related errors
+      const errorMessage = error.message?.toLowerCase() || '';
+      if (errorMessage.includes('failed to process audio file')) {
+        toast.error(
+          'Audio processing failed. The server may be missing FFmpeg. Please try uploading a prescription image instead.', 
+          { duration: 5000 }
+        );
+      } else {
+        toast.error(
+          error.message && typeof error.message === 'string' 
+            ? error.message 
+            : 'Failed to transcribe audio. Please try again.'
+        );
+      }
     } finally {
       setIsProcessing(false);
       setIsRecording(false);
@@ -834,4 +876,4 @@ const PharmacistDashboard: React.FC = () => {
   );
 };
 
-export default PharmacistDashboard; 
+export default PharmacistDashboard;

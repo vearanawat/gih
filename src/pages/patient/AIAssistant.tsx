@@ -1,54 +1,96 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Send, Bot, User, Loader2, Image as ImageIcon, X } from 'lucide-react';
-import { generateAIResponse } from '@/utils/ai';
-import { toast } from 'sonner';
+import React, { useState, useRef, useEffect } from "react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Send, Bot, User, Loader2, Image as ImageIcon, Mic, X, Globe, Volume2 } from "lucide-react";
+import { generateAIResponse } from "@/utils/ai";
+import { toast } from "sonner";
 
 interface Message {
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
   image?: string;
 }
 
+const LANGUAGES = [
+  { code: "en-US", name: "English" },
+  { code: "es-ES", name: "Español (Spanish)" },
+  { code: "fr-FR", name: "Français (French)" },
+  { code: "de-DE", name: "Deutsch (German)" },
+  { code: "it-IT", name: "Italiano (Italian)" },
+  { code: "hi-IN", name: "हिन्दी (Hindi)" },
+  { code: "zh-CN", name: "中文 (Chinese)" },
+  { code: "ja-JP", name: "日本語 (Japanese)" },
+  { code: "ar-SA", name: "العربية (Arabic)" },
+];
+
 const AIAssistant = () => {
   const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'assistant',
-      content: 'Hello! I\'m your AI health assistant. How can I help you today?'
-    }
+    { role: "assistant", content: "Hello! I'm your AI health assistant. How can I help you today?" }
   ]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [selectedLang, setSelectedLang] = useState("en-US");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const synth = window.speechSynthesis; // Speech Synthesis API
 
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      if (file.type.startsWith('image/')) {
-        setSelectedImage(file);
-      } else {
-        toast.error('Please select an image file');
-      }
+  useEffect(() => {
+    if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.lang = selectedLang;
+
+      recognition.onstart = () => setIsListening(true);
+      recognition.onend = () => setIsListening(false);
+      recognition.onerror = (event) => {
+        console.error("Speech Recognition Error:", event);
+        toast.error("Speech recognition failed. Please try again.");
+        setIsListening(false);
+      };
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setInput(transcript);
+      };
+
+      recognitionRef.current = recognition;
+    } else {
+      toast.error("Your browser does not support speech recognition.");
+    }
+  }, [selectedLang]);
+
+  const handleVoiceInput = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+    } else {
+      recognitionRef.current?.start();
     }
   };
 
-  const clearImage = () => {
-    setSelectedImage(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+  // Speak function (now properly working)
+  const speak = (text: string) => {
+    if (synth.speaking) {
+      synth.cancel(); // Stop any previous speech to avoid overlapping
     }
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = selectedLang;
+    utterance.rate = 1; // Normal speed
+
+    utterance.onerror = (event) => {
+      console.error("Speech Synthesis Error:", event);
+      toast.error("Speech synthesis failed.");
+    };
+
+    synth.speak(utterance);
   };
 
   const handleSend = async () => {
@@ -57,41 +99,22 @@ const AIAssistant = () => {
     try {
       setIsLoading(true);
 
-      // Add user message
-      const userMessage: Message = {
-        role: 'user',
-        content: input,
-      };
+      const userMessage: Message = { role: "user", content: input };
+      if (selectedImage) userMessage.image = URL.createObjectURL(selectedImage);
+      setMessages((prev) => [...prev, userMessage]);
+      setInput("");
+      setSelectedImage(null);
 
-      if (selectedImage) {
-        userMessage.image = URL.createObjectURL(selectedImage);
-      }
-
-      setMessages(prev => [...prev, userMessage]);
-      setInput('');
-      clearImage();
-
-      // Get AI response
       const response = await generateAIResponse(input, selectedImage);
+      setMessages((prev) => [...prev, { role: "assistant", content: response }]);
 
-      // Add AI response
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: response
-      }]);
-
+      // Speak AI response after it is fully set
+      setTimeout(() => speak(response), 500); // Small delay to ensure it's set first
     } catch (error) {
-      console.error('Error getting AI response:', error);
-      toast.error('Failed to get response from AI assistant');
+      console.error("Error getting AI response:", error);
+      toast.error("Failed to get response from AI assistant");
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
     }
   };
 
@@ -103,35 +126,32 @@ const AIAssistant = () => {
       </div>
 
       <Card className="flex flex-col h-[calc(100vh-12rem)]">
+        {/* Language Selection */}
+        <div className="p-4 border-b flex items-center gap-2">
+          <Globe className="w-5 h-5 text-gray-500" />
+          <select
+            className="border p-2 rounded-lg"
+            value={selectedLang}
+            onChange={(e) => setSelectedLang(e.target.value)}
+          >
+            {LANGUAGES.map((lang) => (
+              <option key={lang.code} value={lang.code}>
+                {lang.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.map((message, index) => (
-            <div
-              key={index}
-              className={`flex ${message.role === 'assistant' ? 'justify-start' : 'justify-end'}`}
-            >
-              <div className={`flex gap-3 max-w-[80%] ${message.role === 'assistant' ? 'flex-row' : 'flex-row-reverse'}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  message.role === 'assistant' ? 'bg-green-100' : 'bg-blue-100'
-                }`}>
-                  {message.role === 'assistant' ? (
-                    <Bot className="w-5 h-5 text-green-600" />
-                  ) : (
-                    <User className="w-5 h-5 text-blue-600" />
-                  )}
+            <div key={index} className={`flex ${message.role === "assistant" ? "justify-start" : "justify-end"}`}>
+              <div className={`flex gap-3 max-w-[80%] ${message.role === "assistant" ? "flex-row" : "flex-row-reverse"}`}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${message.role === "assistant" ? "bg-green-100" : "bg-blue-100"}`}>
+                  {message.role === "assistant" ? <Bot className="w-5 h-5 text-green-600" /> : <User className="w-5 h-5 text-blue-600" />}
                 </div>
-                <div className={`rounded-lg p-4 ${
-                  message.role === 'assistant' 
-                    ? 'bg-gray-100 text-gray-900' 
-                    : 'bg-blue-600 text-white'
-                }`}>
-                  {message.image && (
-                    <img 
-                      src={message.image} 
-                      alt="Uploaded content"
-                      className="max-w-sm rounded-lg mb-2"
-                    />
-                  )}
+                <div className={`rounded-lg p-4 ${message.role === "assistant" ? "bg-gray-100 text-gray-900" : "bg-blue-600 text-white"}`}>
+                  {message.image && <img src={message.image} alt="Uploaded content" className="max-w-sm rounded-lg mb-2" />}
                   <p className="whitespace-pre-wrap">{message.content}</p>
                 </div>
               </div>
@@ -141,59 +161,18 @@ const AIAssistant = () => {
         </div>
 
         {/* Input Area */}
-        <div className="p-4 border-t">
-          {selectedImage && (
-            <div className="mb-2 flex items-center gap-2 text-sm text-gray-600">
-              <ImageIcon className="w-4 h-4" />
-              <span>{selectedImage.name}</span>
-              <button
-                onClick={clearImage}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-          <div className="flex gap-2">
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              ref={fileInputRef}
-              onChange={handleImageSelect}
-            />
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading}
-            >
-              <ImageIcon className="w-5 h-5" />
-            </Button>
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyPress}
-              placeholder="Type your message..."
-              disabled={isLoading}
-              className="flex-1"
-            />
-            <Button
-              onClick={handleSend}
-              disabled={(!input.trim() && !selectedImage) || isLoading}
-              className="bg-green-600 hover:bg-green-700 text-white"
-            >
-              {isLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Send className="w-5 h-5" />
-              )}
-            </Button>
-          </div>
+        <div className="p-4 border-t flex gap-2">
+          <Button variant="outline" size="icon" onClick={handleVoiceInput} disabled={isLoading}>
+            <Mic className={`w-5 h-5 ${isListening ? "text-red-500 animate-pulse" : ""}`} />
+          </Button>
+          <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Type or speak your message..." disabled={isLoading} className="flex-1" />
+          <Button onClick={handleSend} disabled={(!input.trim() && !selectedImage) || isLoading}>
+            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+          </Button>
         </div>
       </Card>
     </div>
   );
 };
 
-export default AIAssistant; 
+export default AIAssistant;
