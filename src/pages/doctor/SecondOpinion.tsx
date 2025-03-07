@@ -49,16 +49,7 @@ const SecondOpinion = () => {
   };
 
 
-  const sendEmail = async () => {
-      const module = await import("gemini-mail-responder"); // Load the module dynamically
-      module.default.handleEmail(
-        "AIzaSyD1iIg2U0zFjcXG67QiXDKoL2LuThc1uqs",
-        "mediflow25@gmail.com",
-        "rdsb umev ynct gwms",
-        "AI analysis on second opinion is complete",
-        "kartikpandey0604@gmail.com"
-      );
-    };
+
 
   const handleSubmit = async () => {
     // Validate required fields
