@@ -117,11 +117,21 @@ const PharmacistInteractions = () => {
     <div className="fade-in space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Drug Interactions</h1>
-          <p className="text-gray-500 mt-1">Check for potential drug interactions and contraindications</p>
+          <h1 className="text-2xl font-bold text-gray-900">Drug Interactions & Consumption</h1>
+          <p className="text-gray-500 mt-1">Analyze medicine details, including prices, package types, ingredients, and potential drug interactions.</p>
         </div>
       </div>
+      <div style={{ width: "70vw", height: "70vh", border: "2px solid #ccc" }}>
+      <iframe
+        src="https://medicaldashboard-eb8zhegowicdqpjccam7gc.streamlit.app?embed=true"
+        width="100%"
+        height="100%"
+        style={{ border: "none" }}
+        title="Embedded Content"
+      ></iframe>
+    </div>
 
+{/* 
       <div className="grid gap-6 md:grid-cols-[2fr,1fr]">
         <Card className="bg-white">
           <div className="p-6">
@@ -258,7 +268,7 @@ const PharmacistInteractions = () => {
             )}
           </div>
         </Card>
-      </div>
+      </div> */}
     </div>
   );
 };
