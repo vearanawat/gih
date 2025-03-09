@@ -51,7 +51,7 @@ const isNavGroup = (item: NavigationItem): item is NavGroup => {
 
 const navigation: NavigationItem[] = [
   { name: 'Dashboard', href: '/patient-dashboard', icon: Home },
-  { name: 'Prescriptions & Orders', href: '/patient-dashboard/prescriptions', icon: Pill, badge: 2 },
+  // { name: 'Prescriptions & Orders', href: '/patient-dashboard/prescriptions', icon: Pill, badge: 2 },
   { name: 'History', href: '/patient-dashboard/history', icon: History },
   { name: 'AI Assistant', href: '/patient-dashboard/assistant', icon: Bot },
   {

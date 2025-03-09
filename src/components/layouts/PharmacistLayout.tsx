@@ -14,12 +14,14 @@ import {
   Menu,
   Bell,
   Settings,
-  UserRound
+  UserRound,
+  Package2
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Prescriptions', href: '/pharmacist-dashboard', icon: LayoutDashboard },
   { name: 'Orders', href: '/pharmacist-dashboard/orders', icon: ClipboardList },
+  { name: 'Inventory', href: '/pharmacist-dashboard/inventory', icon: Package2 },
   { name: 'Interactions', href: '/pharmacist-dashboard/interactions', icon: AlertCircle },
   { name: 'History', href: '/pharmacist-dashboard/history', icon: History },
   { name: 'Notes', href: '/pharmacist-dashboard/notes', icon: StickyNote },

@@ -15,7 +15,7 @@ import SignInPage from '@/pages/SignIn';
 
 // Patient Pages
 import PatientDashboard from '@/pages/patient/Dashboard';
-import PatientPrescriptions from '@/pages/patient/Prescriptions';
+// import PatientPrescriptions from '@/pages/patient/Prescriptions';
 import PatientDiagnostics from '@/pages/patient/Diagnostics';
 import PatientHistory from '@/pages/patient/History';
 import PatientSettings from '@/pages/patient/Settings';
@@ -37,6 +37,7 @@ import Community from '@/pages/doctor/Community';
 import PharmacistDashboard from '@/pages/pharmacist/Dashboard';
 import PharmacistOrders from '@/pages/pharmacist/Orders';
 import PharmacistInteractions from '@/pages/pharmacist/Interactions';
+import InventoryPage from './pages/pharmacist/Inventory';
 import PharmacistHistory from '@/pages/pharmacist/History';
 import PharmacistNotes from '@/pages/pharmacist/Notes';
 import { SignedIn, SignedOut, SignIn } from "@clerk/clerk-react";
@@ -84,7 +85,7 @@ const App: React.FC = () => {
         <Route element={<PatientLayoutWrapper />}>
           <Route path="/patient-dashboard">
             <Route index element={<PatientDashboard />} />
-            <Route path="prescriptions" element={<PatientPrescriptions />} />
+            {/* <Route path="prescriptions" element={<PatientPrescriptions />} /> */}
             <Route path="diagnostics" element={<PatientDiagnostics />} />
             <Route path="assistant" element={<AIAssistant />} />
             <Route path="history" element={<PatientHistory />} />
@@ -112,6 +113,7 @@ const App: React.FC = () => {
           <Route path="/pharmacist-dashboard">
             <Route index element={<PharmacistDashboard />} />
             <Route path="orders" element={<PharmacistOrders />} />
+            <Route path="inventory" element={<InventoryPage />} />
             <Route path="interactions" element={<PharmacistInteractions />} />
             <Route path="history" element={<PharmacistHistory />} />
             <Route path="notes" element={<PharmacistNotes />} />

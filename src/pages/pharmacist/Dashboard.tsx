@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import {  useUser } from "@clerk/clerk-react";
 
 interface Medicine {
   id: string;
@@ -125,6 +126,7 @@ const PharmacistDashboard: React.FC = () => {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
   const [medicineData, setMedicineData] = useState<MedicineRecord[]>([]);
+  const { user, isSignedIn } = useUser();
 
   useEffect(() => {
     const loadMedicineData = async () => {
@@ -346,6 +348,23 @@ const PharmacistDashboard: React.FC = () => {
     event.preventDefault();
   };
 
+  const sendEmailAfterSignup = async (recipientEmail: string) => {
+    try {
+      await fetch('http://localhost:5000/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          prompt: 'Generate a professional email notifying a pharmacist that MediFlow’s AI assistant has analyzed a prescription and created an order. The email should include a subject line, mention the analysis process, list ordered items, encourage review, provide access details, and end with a professional sign-off. Format as a ready-to-send email ONLY without explanations or notes. Sample Order: Medicine: Metformin 500mg, Quantity: 30 tablets, Dosage: Twice daily after meals.',
+          recipient: recipientEmail
+        })
+      });
+      console.log("Email sent successfully");
+    } catch (error) {
+      console.error("Failed to send email:", error);
+    }
+  };
   const handleStatusChange = (prescriptionId: string, newStatus: 'processed' | 'rejected') => {
     setPrescriptions(prev => prev.map(p => {
       if (p.id === prescriptionId) {
@@ -372,6 +391,9 @@ const PharmacistDashboard: React.FC = () => {
       }
       return p;
     }));
+
+ 
+    sendEmailAfterSignup(user.primaryEmailAddress?.emailAddress || "");
 
     toast.success(`Prescription ${prescriptionId} has been ${newStatus}`);
   };

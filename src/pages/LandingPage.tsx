@@ -70,6 +70,7 @@ const LandingPage = () => {
                 Your Health, Simplified
               </h1>
               <p className="text-xl text-gray-600 mb-8">
+              From Handwriting to Healing – Faster, Smarter, Safer!<br></br>
                 A modern healthcare platform connecting patients, doctors, and pharmacists with AI-powered assistance.
               </p>
               <div className="flex gap-4 justify-center md:justify-start">

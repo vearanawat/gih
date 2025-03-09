@@ -16,3 +16,5 @@ interface ImportMeta {
 
 const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
 const apiUrl = import.meta.env.VITE_OCR_API_URL;
+
+
