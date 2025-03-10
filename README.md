@@ -49,9 +49,12 @@ This project is built with:
 - 🎨 **shadcn-ui + Tailwind CSS** (UI Design)
 - 🏥 **Hugging Face Transformers** (AI Models for Diagnosis & Order Generation)
 - 📄 **PaddleOCR & EasyOCR** (Text Extraction from Prescriptions)
+- 🔍 **Vision Transformer (ViT)** (Fake Prescription Detection)
 - 🔐 **OAuth + 2FA + RBAC** (Security & Authentication)
 - 🚀 **Groq** (LLM acceleration and inference optimization)
 - 📩 **Nodemailer** (Email notifications and alerts)
+
+🔗 **Live Streamlit Dashboard:** [Medical Dashboard](https://medicaldashboard-eb8zhegowicdqpjccam7gc.streamlit.app/)
 
 ---
 
