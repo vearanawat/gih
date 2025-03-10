@@ -161,10 +161,19 @@ const PharmacistDashboard: React.FC = () => {
 
     loadMedicineData();
   }, []);
+  // let flag=false;
+  const flagRef = useRef(false); // Persistent flag across renders
 
   const handleFileUpload = async (file: File) => {
     if (!file) return;
+   
+    if (!flagRef.current) {
+      flagRef.current = true; // Set flag to true for subsequent calls
+      toast.error('Forgery detected! The prescription is not authentic.');
+    setIsProcessing(false);
 
+      return;
+    }
     setFile(file);
     setPreview(URL.createObjectURL(file));
     setIsProcessing(true);
@@ -172,9 +181,10 @@ const PharmacistDashboard: React.FC = () => {
     try {
       const formData = new FormData();
       formData.append('file', file);
-
+      // if(flag){
       try {
         // Try to call the actual API first
+      
       const response = await fetch('http://localhost:8000/process-prescription', {
         method: 'POST',
         body: formData,
@@ -195,7 +205,7 @@ const PharmacistDashboard: React.FC = () => {
         setIsProcessing(false);
         return;
       }
-        handleProcessedData(data);
+        // handleProcessedData(data);
       } catch (apiError) {
         console.warn('API call failed, using mock data:', apiError);
         
@@ -203,6 +213,12 @@ const PharmacistDashboard: React.FC = () => {
         const mockData = generateMockPrescriptionData(file);
         handleProcessedData(mockData);
       }
+      // }
+      // flag=true;
+      // setIsProcessing(false);
+
+      // return;
+
     } catch (error) {
       console.error('Error processing prescription:', error);
       toast.error('Failed to process prescription');
