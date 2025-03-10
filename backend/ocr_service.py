@@ -14,13 +14,14 @@ import speech_recognition as sr
 from pydub import AudioSegment
 import tempfile
 import shutil
-
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
+import nyckel
 # Initialize OCR
 ocr = None
+credentials=nyckel.Credentials(client_id="ktbbnfo7j0z200v5mm16bw0cyhn8vw03", client_secret="rvq97m9bvimyxfi4r0gxb53ntyc5sgbmzwb5amyzdqas92fizihvg3rmr2g893if")
+# nyckel.invoke("prescription-pad-authenticity", "https://res.cloudinary.com/dbdgtr3re/image/upload/v1741553908/GIH/test_ocr_pnj4v2.jpg", credentials)
 
 # Initialize Groq client (assuming it's configured elsewhere)
 groq_client = None
@@ -392,7 +393,7 @@ def add_ocr_routes(app: FastAPI):
             # Read image file
             contents = await file.read()
             image = Image.open(io.BytesIO(contents))
-            
+            nyckel_result = nyckel.invoke("prescription-pad-authenticity", "https://res.cloudinary.com/dbdgtr3re/image/upload/v1741553908/GIH/test_ocr_pnj4v2.jpg",credentials)
             # Handle image format
             if image.mode == 'RGBA':
                 # Create a white background image
@@ -441,7 +442,8 @@ def add_ocr_routes(app: FastAPI):
                     "medicines": medicines,
                     "confidence": avg_confidence,
                     "raw_text": full_text
-                }
+                },
+                "authenticity_check": nyckel_result
             }
         except Exception as e:
             logger.error(f"Error processing image: {str(e)}")

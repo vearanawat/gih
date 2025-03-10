@@ -185,6 +185,16 @@ const PharmacistDashboard: React.FC = () => {
       }
 
       const data = await response.json();
+      console.log("data",data);
+      if (data?.authenticity_check?.labelName === "Authentic") {
+      console.log("done");
+      
+        handleProcessedData(data);
+      } else {
+        toast.error('Forgery detected! The prescription is not authentic.');
+        setIsProcessing(false);
+        return;
+      }
         handleProcessedData(data);
       } catch (apiError) {
         console.warn('API call failed, using mock data:', apiError);
