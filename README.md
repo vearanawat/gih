@@ -69,8 +69,8 @@ To run this project, you need to configure environment variables.
 Create a `.env` file inside the **backend** directory and add the following keys:
 
 ```sh
-GROQ_API_KEY=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
-HUGGINGFACE_API_KEY=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
+GROQ_API_KEY='Your api key'
+HUGGINGFACE_API_KEY='Your api key'
 ```
 
 #### **Install dependencies and run the backend**
@@ -96,10 +96,10 @@ node index.js  # Start the mail backend
 Create a `.env` file inside the **root (main)** directory and add the following keys:
 
 ```sh
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_dGVuZGVyLXJhdHRsZXItNzUuY2xlcmsuYWNjb3VudHMuZGV2JA
-GEMINI_API_KEY=AIzaSyCHzoZHWJdqFeD7fCyTTeMNknq9AUZwpUM
-SENDER_EMAIL=mediflow25@gmail.com
-SENDER_EMAIL_PASSWORD=rdsb umev ynct gwms
+VITE_CLERK_PUBLISHABLE_KEY='Your api key'
+GEMINI_API_KEY='Your api key'
+SENDER_EMAIL='Your email id'
+SENDER_EMAIL_PASSWORD='Your pass key'
 ```
 
 #### **Install dependencies and run the frontend**
@@ -119,7 +119,7 @@ If you want to edit locally, follow these steps:
 
 ```sh
 # Step 1: Clone the repository using the project's Git URL.
-git clone https://github.com/vearanawat/Girl-Hackathon_2025.git
+git clone https://github.com/vearanawat/gih.git
 
 # Step 2: Install the necessary dependencies.
 npm i
